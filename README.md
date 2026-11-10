@@ -6,9 +6,32 @@
 
 `defer` provides block-scoped cleanup for C and Objective-C, and a native C++ scope guard. The `defer-tool` source transformer uses LLVM 19 or newer and libclang. Cleanup is registered when execution reaches `defer(...)` and runs in reverse order on supported block exits. It does not run on `longjmp` or process termination. Unsupported cases produce an error.
 
+## Build and install
+
+Install CMake 3.25 or newer, Ninja, Clang, and LLVM development libraries and libclang 19 or newer. On Linux or macOS, configure and build from the repository root:
+
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++
+cmake --build build
+ctest --test-dir build --output-on-failure
+cmake --install build --prefix /your/install/prefix
+```
+
+On Windows, install the Visual Studio C++ build tools and a compatible Clang toolchain, CMake, and Ninja. Use a developer PowerShell for your target architecture so the Windows SDK and linker are available. Extract an LLVM development archive for that architecture containing `include/`, `lib/`, and `bin/libclang.dll`, then point `DEFER_LLVM_DEV_ROOT` at it:
+
+```powershell
+cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++ `
+  -DDEFER_LLVM_DEV_ROOT="C:/path/to/llvm-dev"
+cmake --build build
+ctest --test-dir build --output-on-failure
+cmake --install build --prefix "C:/path/to/defer-install"
+```
+
+`make build`, `make install`, `make format`, and `make format-check` provide shortcuts where Make is available. The install includes the CLI, SDK libraries and headers, and the CMake module. A normal development build uses a shared libclang; release builds link it statically. Build the two-language documentation separately with `cmake -S docs -B build/docs` followed by `cmake --build build/docs --target docs`.
+
 ## Use without CMake
 
-Build the tool as described below, then transform and compile a source file:
+Build and install the tool as described above, add the installation's `bin` directory to your `PATH`, then transform and compile a source file:
 
 ```sh
 defer-tool examples/hello_world/main.c build/hello.c -- -Icpp/include
@@ -90,16 +113,3 @@ auto generated = defer_tool::transform_source("src/example.c", source, {"-std=c1
 The virtual filename determines language detection, diagnostics, and relative include lookup. Transformation failures throw an exception; the API does not overwrite the source file. Release archives include the SDK libraries, public headers, and the Clang C headers used by the lower-level API.
 
 For a C ABI suitable for shared-library boundaries, include `defer_api.h` and call `defer_transform_source`. Release every returned output or error with `defer_free_buffer`, which frees it in the library that allocated it. The C++ API exposes a C++ ABI, so use a compatible compiler, standard library, and architecture when linking it. The Windows release libraries use the static MSVC runtime (`MultiThreaded` in CMake). The bundled static SDK archive contains its LLVM and libclang implementation; platform system libraries such as threads and `dl` may still need to be linked by the consumer.
-
-## Building and testing
-
-Install CMake 3.25+, Ninja, Clang, LLVM development libraries and libclang 19 or newer. On Windows set `DEFER_LLVM_DEV_ROOT` to an LLVM development archive with `include`, `lib`, and `bin` directories.
-
-```sh
-cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++
-cmake --build build
-ctest --test-dir build --output-on-failure
-cmake --install build --prefix /your/install/prefix
-```
-
-`make build`, `make install`, `make format`, and `make format-check` provide shortcuts. The install includes the CLI, SDK libraries and headers, and the CMake module. A normal development build uses a shared libclang; release builds link it statically. Build the two-language documentation separately with `cmake -S docs -B build/docs` followed by `cmake --build build/docs --target docs`.
