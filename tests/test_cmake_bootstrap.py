@@ -14,6 +14,43 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path) -> None:
+    binary = os.environ.get("DEFER_TEST_BINARY")
+    cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", "clang"))
+    if not all((binary, cmake, ninja, clang)):
+        pytest.skip("native defer binary, CMake, Ninja and Clang are required")
+    assert binary is not None and cmake is not None and clang is not None
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "main.c").write_text(
+        '#include "defer.h"\nint other(void);\nint main(void) { int n=0; { defer(n=other()); } return n!=3; }\n',
+        encoding="utf-8",
+    )
+    (project / "other.c").write_text("int other(void) { return 3; }\n", encoding="utf-8")
+    (project / "CMakeLists.txt").write_text(
+        'cmake_minimum_required(VERSION 3.25)\nproject(hook C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
+        f'include("{(ROOT / "Defer.cmake").as_posix()}")\n'
+        'function(preprocess out target source relative compiled)\n'
+        '  set(generated "${CMAKE_BINARY_DIR}/preprocessed/${relative}")\n'
+        '  get_filename_component(dir "${generated}" DIRECTORY)\n'
+        '  add_custom_command(OUTPUT "${generated}" COMMAND "${CMAKE_COMMAND}" -E make_directory "${dir}"\n'
+        '    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${source}" "${generated}" DEPENDS "${source}")\n'
+        '  set(${out} "${generated}" PARENT_SCOPE)\nendfunction()\n'
+        f'add_executable(probe main.c other.c)\ntarget_include_directories(probe PRIVATE "{(ROOT / "cpp/include").as_posix()}")\n'
+        'set(DEFER_SOURCE_HOOK preprocess)\ndefer_target(probe)\n', encoding="utf-8"
+    )
+    build = tmp_path / "build"
+    for args in ([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja",
+                  f"-DCMAKE_C_COMPILER={clang}", f"-DDEFER_NATIVE_BINARY={binary}"],
+                 [cmake, "--build", str(build)]):
+        result = subprocess.run(args, capture_output=True, text=True, check=False)
+        assert result.returncode == 0, result.stdout + result.stderr
+    assert (build / "preprocessed" / "main.c").is_file()
+    assert (build / "preprocessed" / "other.c").is_file()
+    executable = build / ("probe.exe" if sys.platform == "win32" else "probe")
+    subprocess.run([executable], check=True)
+
+
 @pytest.mark.parametrize("compiler_name", ["clang", "clang-cl"])
 def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, compiler_name: str) -> None:
     binary = os.environ.get("DEFER_TEST_BINARY")
