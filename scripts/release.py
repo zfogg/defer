@@ -120,9 +120,12 @@ def verify_sdk(work: Path, stage: Path, cxx: str) -> None:
     source = work / "sdk-smoke"
     source.mkdir(exist_ok=True)
     (source / "main.cpp").write_text(
-        '#include "driver.h"\n#include <iostream>\n'
+        '#include "api.h"\n#include <iostream>\n'
         'int main(int argc, char** argv) { if (argc != 2) return 1; '
-        'std::cout << defer_tool::read_file(argv[1]); return 0; }\n', encoding="utf-8"
+        'auto output = defer_tool::transform_source("sdk.c", '
+        '"#include \\\"defer.h\\\"\\nvoid f(void) { defer((void)0); }\\n", {std::string("-I") + argv[1]}); '
+        'if (output.find("__defer_active_") == std::string::npos) return 2; '
+        'std::cout << "SDK smoke test\\n"; return 0; }\n', encoding="utf-8"
     )
     (source / "CMakeLists.txt").write_text(
         '''cmake_minimum_required(VERSION 3.25)
@@ -161,11 +164,9 @@ endforeach()
     run("cmake", "--build", build)
     if sys.platform == "win32":
         shutil.copyfile(stage / "bin/defer-shared.dll", build / "defer-shared.dll")
-    fixture = work / "sdk-input.txt"
-    fixture.write_text("SDK smoke test\n", encoding="utf-8")
     for kind in ("static", "shared"):
         executable = build / (f"smoke_{kind}.exe" if sys.platform == "win32" else f"smoke_{kind}")
-        if subprocess.check_output([executable, fixture], text=True) != "SDK smoke test\n":
+        if subprocess.check_output([executable, stage / "include"], text=True) != "SDK smoke test\n":
             raise RuntimeError(f"{kind} SDK smoke test failed")
 
 

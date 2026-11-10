@@ -75,6 +75,18 @@ defer_targets(app)
 
 Choose the ZIP for the **build host**, including for cross compilation. Set `CMAKE_EXPORT_COMPILE_COMMANDS=ON` before configuring targets. The module's `DEFER_SOURCE_DIRS` and `DEFER_WRAPPER_HEADER_DIRS` options control which project and external headers it scans. The [documentation site](https://zfogg.github.io/defer/) describes scope, restrictions, and the SDK.
 
+## C++ SDK
+
+Include `api.h` and link the static or shared SDK library to transform an in-memory source buffer:
+
+```cpp
+#include <api.h>
+
+auto generated = defer_tool::transform_source("src/example.c", source, {"-std=c17", "-Iinclude"});
+```
+
+The virtual filename determines language detection, diagnostics, and relative include lookup. Transformation failures throw an exception; the API does not overwrite the source file. Release archives include the SDK libraries, public headers, and the Clang C headers used by the lower-level API.
+
 ## Building and testing
 
 Install CMake 3.25+, Ninja, Clang, LLVM development libraries and libclang 19 or newer. On Windows set `DEFER_LLVM_DEV_ROOT` to an LLVM development archive with `include`, `lib`, and `bin` directories.
