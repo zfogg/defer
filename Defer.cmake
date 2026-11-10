@@ -53,16 +53,19 @@ endfunction()
 # Track directory membership while excluding the build tree. A recursive glob
 # over the source root would otherwise discover generated overlay headers and
 # repeatedly regenerate an in-source-tree build.
-function(defer_collect_headers out_var directory)
+function(defer_collect_headers out_var directory is_root allow_build)
     get_filename_component(_directory "${directory}" ABSOLUTE)
     get_filename_component(_name "${_directory}" NAME)
-    if(NOT ARGN AND _name MATCHES "^(\\.git|\\.hg|\\.svn|\\.venv|venv|__pycache__|node_modules)$")
+    if(NOT is_root AND _name MATCHES "^(\\.git|\\.hg|\\.svn|\\.venv|venv|__pycache__|node_modules|CMakeFiles)$")
         set(${out_var} "" PARENT_SCOPE)
         return()
     endif()
     get_filename_component(_build "${CMAKE_BINARY_DIR}" ABSOLUTE)
     cmake_path(IS_PREFIX _build "${_directory}" NORMALIZE _inside_build)
-    if(_inside_build OR NOT IS_DIRECTORY "${_directory}")
+    if(is_root AND NOT _inside_build)
+        set(allow_build FALSE)
+    endif()
+    if((_inside_build AND NOT allow_build) OR NOT IS_DIRECTORY "${_directory}")
         set(${out_var} "" PARENT_SCOPE)
         return()
     endif()
@@ -73,9 +76,12 @@ function(defer_collect_headers out_var directory)
             # query for every file on a potentially remote source mount.
             # Directory timestamps detect membership changes; header contents
             # are separately registered as configure dependencies below.
-            set(_prune \( \( ! -path "${_directory}" \( -name .git -o -name .hg -o -name .svn
-                -o -name .venv -o -name venv -o -name __pycache__ -o -name node_modules \) \)
-                -o -path "${_build}" \) -prune -o)
+            set(_prune \( ! -path "${_directory}" \( -name .git -o -name .hg -o -name .svn
+                -o -name .venv -o -name venv -o -name __pycache__ -o -name node_modules -o -name CMakeFiles \) \))
+            if(NOT allow_build)
+                set(_prune \( ${_prune} -o -path "${_build}" \))
+            endif()
+            list(APPEND _prune -prune -o)
             execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune} -type d -print
                 OUTPUT_VARIABLE _directory_output RESULT_VARIABLE _directory_result ERROR_VARIABLE _directory_error
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -89,6 +95,12 @@ function(defer_collect_headers out_var directory)
             endif()
             string(REPLACE "\n" ";" _directories "${_directory_output}")
             string(REPLACE "\n" ";" _headers "${_header_output}")
+            if(allow_build AND _directory STREQUAL _build)
+                # Do not watch build.ninja's parent timestamp: CMake rewrites
+                # files there on regeneration. Track immediate entries by glob.
+                list(REMOVE_ITEM _directories "${_build}")
+                file(GLOB _build_root_entries CONFIGURE_DEPENDS LIST_DIRECTORIES TRUE "${_build}/*")
+            endif()
             set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
                 ${_directories})
             set(${out_var} "${_headers}" PARENT_SCOPE)
@@ -99,7 +111,7 @@ function(defer_collect_headers out_var directory)
     set(_headers "")
     foreach(_entry IN LISTS _entries)
         if(IS_DIRECTORY "${_entry}")
-            defer_collect_headers(_nested "${_entry}")
+            defer_collect_headers(_nested "${_entry}" FALSE "${allow_build}")
             list(APPEND _headers ${_nested})
         elseif(_entry MATCHES "\\.(h|hpp|hh|hxx|inc|def)$")
             list(APPEND _headers "${_entry}")
@@ -360,7 +372,7 @@ function(defer_scan_targets out_var)
     # Discover wrapper names from project headers, including transitive wrappers.
     # This stays conservative: false positives merely cause a source to be parsed.
     foreach(_directory IN LISTS DEFER_SOURCE_DIRS)
-        defer_collect_headers(_directory_headers "${DEFER_SOURCE_ROOT}/${_directory}" TRUE)
+        defer_collect_headers(_directory_headers "${DEFER_SOURCE_ROOT}/${_directory}" TRUE FALSE)
         list(APPEND _defer_headers ${_directory_headers})
     endforeach()
     foreach(_extra_dir IN LISTS DEFER_WRAPPER_HEADER_DIRS)
@@ -368,7 +380,7 @@ function(defer_scan_targets out_var)
         if(NOT IS_DIRECTORY "${_extra_dir}")
             message(FATAL_ERROR "defer wrapper header directory does not exist: ${_extra_dir}")
         endif()
-        defer_collect_headers(_extra_headers "${_extra_dir}" TRUE)
+        defer_collect_headers(_extra_headers "${_extra_dir}" TRUE TRUE)
         list(APPEND _defer_headers ${_extra_headers})
     endforeach()
     list(REMOVE_DUPLICATES _defer_headers)
