@@ -786,6 +786,28 @@ def test_compilation_database_prefers_generated_entry(tmp_path: Path, transform_
     assert output.exists()
 
 
+@pytest.mark.parametrize("separate", [False, True])
+def test_clang_cl_database_discards_output_flags(
+    tmp_path: Path, transform_environment: dict[str, str], separate: bool
+) -> None:
+    compiler = shutil.which("clang-cl")
+    if sys.platform != "win32" or not compiler:
+        pytest.skip("clang-cl on Windows is required")
+    source, output = tmp_path / "input.c", tmp_path / "output.c"
+    source.write_text('#include "defer.h"\nvoid f(void) { defer((void)0); }\n', encoding="utf-8")
+    outputs = (["/Fo", "out.obj", "/Fd", "out.pdb"] if separate else ["/Foout.obj", "/Fdout.pdb"])
+    commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
+        compiler, f"-I{ROOT / 'cpp' / 'include'}", *outputs, "/c", str(source)
+    ]}]
+    (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
+    result = subprocess.run(
+        [*tool_command(transform_environment), "--compilation-database", str(tmp_path), str(source), str(output)],
+        capture_output=True, text=True, env=transform_environment, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "__defer_active_" in output.read_text(encoding="utf-8")
+
+
 def test_compilation_database_rejects_ambiguous_source_entry(tmp_path: Path, transform_environment: dict[str, str]) -> None:
     source, output = tmp_path / "input.c", tmp_path / "output.c"
     source.write_text('void f(void) {}\n', encoding="utf-8")

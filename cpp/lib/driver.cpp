@@ -160,12 +160,22 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       i += 4;
       continue;
     }
-    if (value == "-o" || value == "-MF" || value == "-MT" || value == "-MQ") {
+    if (value == "-o" || value == "-MF" || value == "-MT" || value == "-MQ" || value == "/Fo" || value == "/Fd") {
       i += 2;
+      continue;
+    }
+    if (value.rfind("/Fo", 0) == 0 || value.rfind("/Fd", 0) == 0) {
+      ++i;
       continue;
     }
     if (value == "-ivfsoverlay" && i + 1 < args.size() &&
         fs::weakly_canonical(working_directory / fs::u8path(args[i + 1])) == fs::weakly_canonical(generated_overlay)) {
+      i += 2;
+      continue;
+    }
+    if (value == "-clang:-ivfsoverlay" && i + 1 < args.size() && args[i + 1].rfind("-clang:", 0) == 0 &&
+        fs::weakly_canonical(working_directory / fs::u8path(args[i + 1].substr(7))) ==
+            fs::weakly_canonical(generated_overlay)) {
       i += 2;
       continue;
     }
@@ -176,7 +186,7 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       ++i;
       continue;
     }
-    if (value == "--" || value == "-c" || value == "-MD" || value == "-MMD" || value == "-MP" ||
+    if (value == "--" || value == "-c" || value == "/c" || value == "-MD" || value == "-MMD" || value == "-MP" ||
         (!value.empty() && value[0] != '-' &&
          database_path_key(working_directory / fs::u8path(value)) == database_path_key(selected))) {
       ++i;

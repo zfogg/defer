@@ -98,15 +98,23 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
         ):
             index += 4
             continue
-        if value in ("-o", "-MF", "-MT", "-MQ"):
+        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd"):
             index += 2
+            continue
+        if value.startswith(("/Fo", "/Fd")):
+            index += 1
             continue
         if (value == "-ivfsoverlay" and index + 1 < len(arguments)
             and Path(arguments[index + 1]).resolve() == Path(str(generated.resolve().parent) + ".vfs.json").resolve()):
             index += 2
             continue
+        if (value == "-clang:-ivfsoverlay" and index + 1 < len(arguments)
+            and arguments[index + 1].startswith("-clang:")
+            and Path(arguments[index + 1][7:]).resolve() == Path(str(generated.resolve().parent) + ".vfs.json").resolve()):
+            index += 2
+            continue
         if (
-            value in ("--", "-c", "-MD", "-MMD", "-MP")
+            value in ("--", "-c", "/c", "-MD", "-MMD", "-MP")
             or Path(value).resolve() == selected
         ):
             index += 1

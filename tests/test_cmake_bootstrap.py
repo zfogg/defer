@@ -14,9 +14,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path) -> None:
+@pytest.mark.parametrize("compiler_name", ["clang", "clang-cl"])
+def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, compiler_name: str) -> None:
     binary = os.environ.get("DEFER_TEST_BINARY")
-    cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", "clang"))
+    if compiler_name == "clang-cl" and (sys.platform != "win32" or not os.environ.get("INCLUDE")):
+        pytest.skip("clang-cl requires a Windows developer environment")
+    cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", compiler_name))
     if not all((binary, cmake, ninja, clang)):
         pytest.skip("native defer binary, CMake, Ninja and Clang are required")
     assert binary is not None and cmake is not None and clang is not None
@@ -63,3 +66,10 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path) -
     subprocess.run([executable], check=True)
     third = subprocess.run([cmake, "--build", str(build)], capture_output=True, text=True, check=True)
     assert "Transforming defer source batch" not in third.stdout
+    (project / "cleanup.h").write_text(
+        '#include "defer.h"\nstatic int cleanup(void) { int x = 0; { defer(x = 1); } return x; }\n',
+        encoding="utf-8",
+    )
+    source.write_text('#include "cleanup.h"\nint main(void) { return cleanup() != 1; }\n', encoding="utf-8")
+    subprocess.run([cmake, "--build", str(build)], capture_output=True, text=True, check=True)
+    subprocess.run([executable], check=True)
