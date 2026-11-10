@@ -15,6 +15,39 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("backend", ["NATIVE", "PYTHON"])
+def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend: str) -> None:
+    binary = os.environ.get("DEFER_TEST_BINARY")
+    toolchain = os.environ.get("EMSCRIPTEN_TOOLCHAIN_FILE")
+    libclang = os.environ.get("LIBCLANG_LIBRARY_FILE")
+    cmake, ninja = (shutil.which(name) for name in ("cmake", "ninja"))
+    if not all((binary, toolchain, cmake, ninja)) or (backend == "PYTHON" and not libclang):
+        pytest.skip("defer binary, Emscripten toolchain, CMake, Ninja and Python libclang are required")
+    assert binary is not None and toolchain is not None and cmake is not None
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "probe.c").write_text(
+        '#include <emscripten/emscripten.h>\n#include "defer.h"\n'
+        '#if !defined(__EMSCRIPTEN__) || __STDC_VERSION__ != 201710L\n#error incorrect flags\n#endif\n'
+        'int probe(void) { int n=0; defer(n++); return n; }\n', encoding="utf-8"
+    )
+    (project / "CMakeLists.txt").write_text(
+        'cmake_minimum_required(VERSION 3.25)\nproject(probe C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
+        f'include("{(ROOT / "Defer.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
+        f'target_include_directories(probe PRIVATE "{(ROOT / "cpp/include").as_posix()}")\n'
+        'target_compile_options(probe PRIVATE -sASSERTIONS=1)\nset_property(TARGET probe PROPERTY C_STANDARD 17)\n'
+        'defer_target(probe)\n', encoding="utf-8"
+    )
+    build = tmp_path / "build"
+    env = {**os.environ, "EM_CACHE": str(tmp_path / "emsdk cache")}
+    for args in ([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja", f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
+                  f"-DDEFER_NATIVE_BINARY={binary}", f"-DDEFER_BACKEND={backend}", f"-DDEFER_TOOL_ROOT={ROOT}",
+                  f"-DDEFER_PYTHON_COMMAND={sys.executable}", f"-DDEFER_LIBCLANG_PATH={libclang or ''}"],
+                 [cmake, "--build", str(build)]):
+        result = subprocess.run(args, capture_output=True, text=True, env=env, check=False, timeout=180)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) -> None:
     binary = os.environ.get("DEFER_TEST_BINARY")
     cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", "clang"))

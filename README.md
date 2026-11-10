@@ -113,6 +113,8 @@ defer_targets(app)
 
 The module uses batch transformation and the compilation database, supports incremental rebuilds and header overlays, and requires single-config Ninja or Unix Makefiles. Include `defer.h` in source files. See `examples/hello_world_cmake` for an example.
 
+For Emscripten compilation-database entries, the tool queries `emcc --cflags` for the driver's actual target and sysroot. It initializes an empty SDK sysroot through `emcc` when needed; it does not assume the cache is next to the compiler.
+
 The module also accepts these CMake variables:
 
 | Variable | Purpose |

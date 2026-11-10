@@ -230,7 +230,7 @@ std::string cache_context(const char *program) {
   }
 #endif
   context += defer_tool::consume_string(clang_getClangVersion()) + "\n";
-  for (const char *name : {"CPATH", "C_INCLUDE_PATH", "SDKROOT", "INCLUDE", "PATH"})
+  for (const char *name : {"CPATH", "C_INCLUDE_PATH", "SDKROOT", "INCLUDE", "PATH", "EM_CACHE", "EM_CONFIG", "EMSDK"})
     context += std::string(name) + "=" + llvm::sys::Process::GetEnv(name).value_or("") + "\n";
   return context;
 }

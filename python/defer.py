@@ -10,6 +10,7 @@ import importlib.metadata
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -33,6 +34,42 @@ from analysis import (
     transform_input,
 )
 from manifest import Manifest, ManifestError
+
+
+@functools.cache
+def emscripten_driver_defaults(compiler: str) -> list[str]:
+    process = subprocess.run([compiler, "--cflags"], capture_output=True, text=True, check=False)
+    if process.returncode:
+        raise TransformError(f"cannot query Emscripten compiler flags: {process.stderr}")
+    flags = shlex.split(process.stdout)
+    result: list[str] = []
+    sysroot = ""
+    index = 0
+    while index < len(flags):
+        flag = flags[index]
+        if flag in ("-target", "--target", "--sysroot") and index + 1 < len(flags):
+            result.extend(flags[index:index + 2])
+            if flag == "--sysroot":
+                sysroot = flags[index + 1]
+            index += 2
+            continue
+        if flag.startswith(("--target=", "--sysroot=")):
+            result.append(flag)
+            if flag.startswith("--sysroot="):
+                sysroot = flag.removeprefix("--sysroot=")
+        elif flag == "-Xclang" and index + 1 < len(flags) and flags[index + 1].startswith("-iwithsysroot"):
+            result.extend(flags[index:index + 2])
+            index += 2
+            continue
+        index += 1
+    if not sysroot:
+        raise TransformError(f"Emscripten did not report a sysroot: {compiler}")
+    if not (Path(sysroot) / "include" / "emscripten" / "emscripten.h").is_file():
+        process = subprocess.run([compiler, "-E", "-x", "c", "-"], input="", stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.PIPE, text=True, check=False)
+        if process.returncode:
+            raise TransformError(f"cannot initialize Emscripten sysroot: {process.stderr}")
+    return result
 
 
 @functools.lru_cache(maxsize=1)
@@ -111,6 +148,9 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
     compiler = arguments.pop(0)
     os.chdir(command.directory)
     result = ["-iquote", str(source.resolve().parent)]
+    emscripten = "emcc" in compiler or "em++" in compiler
+    if emscripten:
+        result.extend(emscripten_driver_defaults(compiler))
     index = 0
     while index < len(arguments):
         value = arguments[index]
@@ -135,6 +175,13 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             and arguments[index + 1].startswith("-clang:")
             and Path(arguments[index + 1][7:]).resolve() == Path(str(generated.resolve().parent) + ".vfs.json").resolve()):
             index += 2
+            continue
+        if emscripten and value == "-s" and index + 1 < len(arguments):
+            index += 2
+            continue
+        if emscripten and ((value.startswith("-s") and len(value) > 2 and value[2].isupper())
+                           or value in ("-msimd128", "-Wno-error=pthreads-mem-growth")):
+            index += 1
             continue
         if (
             value in ("--", "-c", "/c", "-MD", "-MMD", "-MP")

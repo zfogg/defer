@@ -11,12 +11,15 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ADT/StringExtras.h>
 #include <llvm/ADT/StringRef.h>
+#include <llvm/Support/Allocator.h>
+#include <llvm/Support/CommandLine.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FormatVariadic.h>
 #include <llvm/Support/JSON.h>
 #include <llvm/Support/Process.h>
 #include <llvm/Support/Program.h>
 #include <llvm/Support/SHA256.h>
+#include <llvm/Support/StringSaver.h>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -87,11 +90,11 @@ std::size_t exact_command_count(const fs::path &directory, CXCompilationDatabase
   return count == found->second.counts.end() ? 0 : count->second;
 }
 
-std::string compiler_resource_dir(const std::string &compiler) {
+std::string compiler_query(const std::string &compiler, const std::string &option) {
   static std::map<std::string, std::string> cached;
   static std::mutex cache_mutex;
   std::lock_guard<std::mutex> lock(cache_mutex);
-  const auto key = fs::absolute(fs::u8path(compiler)).u8string();
+  const auto key = fs::absolute(fs::u8path(compiler)).u8string() + "\n" + option;
   if (cached.count(key))
     return cached.at(key);
   auto program = llvm::sys::findProgramByName(compiler);
@@ -104,7 +107,7 @@ std::string compiler_resource_dir(const std::string &compiler) {
   if (auto error = llvm::sys::Process::SafelyCloseFileDescriptor(fd))
     throw std::runtime_error("cannot close resource directory output: " + error.message());
   std::string temp_path(temporary.str());
-  const llvm::StringRef arguments[] = {*program, "-print-resource-dir"};
+  const llvm::StringRef arguments[] = {*program, option};
   const std::optional<llvm::StringRef> redirects[] = {std::nullopt, llvm::StringRef(temp_path), std::nullopt};
   const int result = llvm::sys::ExecuteAndWait(*program, arguments, std::nullopt, redirects);
   std::string resource;
@@ -120,9 +123,59 @@ std::string compiler_resource_dir(const std::string &compiler) {
   while (!resource.empty() && (resource.back() == '\n' || resource.back() == '\r' || resource.back() == ' '))
     resource.pop_back();
   if (result != 0 || resource.empty())
-    throw std::runtime_error("cannot determine compiler resource directory: " + compiler);
+    throw std::runtime_error("compiler query failed: " + compiler + " " + option);
   cached.emplace(key, resource);
   return resource;
+}
+
+std::vector<std::string> emscripten_driver_defaults(const std::string &compiler) {
+  static std::mutex mutex;
+  static std::map<std::string, std::vector<std::string>> cached;
+  std::lock_guard<std::mutex> lock(mutex);
+  if (const auto found = cached.find(compiler); found != cached.end())
+    return found->second;
+  auto flags = compiler_query(compiler, "--cflags");
+#ifdef _WIN32
+  // Emscripten prints shell-quoted Windows paths; GNU tokenization otherwise
+  // treats their backslashes as escapes even inside single-quoted arguments.
+  std::replace(flags.begin(), flags.end(), '\\', '/');
+#endif
+  llvm::BumpPtrAllocator allocator;
+  llvm::StringSaver saver(allocator);
+  llvm::SmallVector<const char *, 16> tokens;
+  llvm::cl::TokenizeGNUCommandLine(flags, saver, tokens);
+  std::vector<std::string> result;
+  std::string sysroot;
+  for (std::size_t i = 0; i < tokens.size(); ++i) {
+    const std::string flag(tokens[i]);
+    if ((flag == "-target" || flag == "--target" || flag == "--sysroot") && i + 1 < tokens.size()) {
+      result.push_back(flag);
+      result.emplace_back(tokens[++i]);
+      if (flag == "--sysroot")
+        sysroot = result.back();
+    } else if (flag.rfind("--target=", 0) == 0 || flag.rfind("--sysroot=", 0) == 0) {
+      result.push_back(flag);
+      if (flag.rfind("--sysroot=", 0) == 0)
+        sysroot = flag.substr(10);
+    } else if (flag == "-Xclang" && i + 1 < tokens.size() &&
+               std::string_view(tokens[i + 1]).rfind("-iwithsysroot", 0) == 0) {
+      result.push_back(flag);
+      result.emplace_back(tokens[++i]);
+    }
+  }
+  if (sysroot.empty())
+    throw std::runtime_error("Emscripten did not report a sysroot: " + compiler);
+  if (!fs::exists(fs::u8path(sysroot) / "include" / "emscripten" / "emscripten.h")) {
+    const auto program = llvm::sys::findProgramByName(compiler);
+    if (!program)
+      throw std::runtime_error("cannot find compiler: " + compiler);
+    const llvm::StringRef args[] = {*program, "-E", "-x", "c", "-"};
+    const std::optional<llvm::StringRef> redirects[] = {llvm::StringRef(""), llvm::StringRef(""), std::nullopt};
+    if (llvm::sys::ExecuteAndWait(*program, args, std::nullopt, redirects) != 0)
+      throw std::runtime_error("cannot initialize Emscripten sysroot: " + compiler);
+  }
+  cached.emplace(compiler, result);
+  return result;
 }
 
 #ifdef __APPLE__
@@ -182,9 +235,8 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   std::vector<std::string> result = {"-working-directory", directory, "-iquote", source.parent_path().u8string()};
   const bool emscripten = compiler.find("emcc") != std::string::npos || compiler.find("em++") != std::string::npos;
   if (emscripten) {
-    result.insert(result.end(), {"-target", "wasm32-unknown-emscripten"});
-    const fs::path compiler_path = fs::u8path(compiler);
-    result.insert(result.end(), {"-isystem", (compiler_path.parent_path() / "cache/sysroot/include").u8string()});
+    const auto defaults = emscripten_driver_defaults(compiler);
+    result.insert(result.end(), defaults.begin(), defaults.end());
   }
   for (std::size_t i = 1; i < args.size();) {
     const auto &value = args[i];
@@ -238,7 +290,7 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     if (compiler_path.is_relative() && compiler_path.has_parent_path())
       compiler_path = (working_directory / compiler_path).lexically_normal();
     result.push_back("-resource-dir");
-    result.push_back(compiler_resource_dir(compiler_path.u8string()));
+    result.push_back(compiler_query(compiler_path.u8string(), "-print-resource-dir"));
   }
   return result;
 }
@@ -256,7 +308,7 @@ void add_default_resource_dir(std::vector<std::string> &arguments) {
                    [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; }) &&
       llvm::sys::findProgramByName("clang")) {
     arguments.push_back("-resource-dir");
-    arguments.push_back(compiler_resource_dir("clang"));
+    arguments.push_back(compiler_query("clang", "-print-resource-dir"));
   }
 #ifdef __APPLE__
   const bool explicit_target = std::any_of(arguments.begin(), arguments.end(), [](const auto &arg) {
