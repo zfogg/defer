@@ -1,5 +1,7 @@
 # Native C++ tool and SDK
 
+[GitHub](https://github.com/zfogg/defer) · [Documentation](https://zfogg.github.io/defer/) · [C++ and C API](https://zfogg.github.io/defer/cpp/) · [Python API](https://zfogg.github.io/defer/python/)
+
 The native `defer-tool` transforms C and Objective-C sources using libclang.
 C++11 and later use a native scope guard. Cleanup is registered at the point of
 a `defer()` statement, runs in reverse order when its block exits, and fails
