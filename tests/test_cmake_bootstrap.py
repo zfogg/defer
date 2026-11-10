@@ -47,12 +47,16 @@ def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) ->
     assert "Transforming defer source batch" not in result.stdout
 
 
-def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path) -> None:
+@pytest.mark.parametrize("backend", ["NATIVE", "PYTHON"])
+def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path, backend: str) -> None:
     binary = os.environ.get("DEFER_TEST_BINARY")
     cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", "clang"))
     if not all((binary, cmake, ninja, clang)):
         pytest.skip("native defer binary, CMake, Ninja and Clang are required")
     assert binary is not None and cmake is not None and clang is not None
+    libclang = os.environ.get("LIBCLANG_LIBRARY_FILE")
+    if backend == "PYTHON" and not libclang:
+        pytest.skip("LIBCLANG_LIBRARY_FILE is required for the Python backend")
     project = tmp_path / "project"
     project.mkdir()
     (project / "main.c").write_text(
@@ -74,7 +78,9 @@ def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path) -> 
     )
     build = tmp_path / "build"
     for args in ([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja",
-                  f"-DCMAKE_C_COMPILER={clang}", f"-DDEFER_NATIVE_BINARY={binary}"],
+                  f"-DCMAKE_C_COMPILER={clang}", f"-DDEFER_NATIVE_BINARY={binary}", f"-DDEFER_BACKEND={backend}",
+                  f"-DDEFER_TOOL_ROOT={ROOT}", f"-DDEFER_PYTHON_COMMAND={sys.executable}",
+                  f"-DDEFER_LIBCLANG_PATH={libclang or ''}"],
                  [cmake, "--build", str(build)]):
         result = subprocess.run(args, capture_output=True, text=True, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
