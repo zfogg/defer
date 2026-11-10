@@ -218,9 +218,9 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       i += 2;
       continue;
     }
-    if (emscripten && ((value.size() > 2 && value.rfind("-s", 0) == 0 &&
-                        std::isupper(static_cast<unsigned char>(value[2]))) ||
-                       value == "-msimd128" || value == "-Wno-error=pthreads-mem-growth")) {
+    if (emscripten &&
+        ((value.size() > 2 && value.rfind("-s", 0) == 0 && std::isupper(static_cast<unsigned char>(value[2]))) ||
+         value == "-msimd128" || value == "-Wno-error=pthreads-mem-growth")) {
       ++i;
       continue;
     }
