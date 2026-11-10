@@ -125,6 +125,37 @@ std::string compiler_resource_dir(const std::string &compiler) {
   return resource;
 }
 
+#ifdef __APPLE__
+std::string default_macos_sdk() {
+  static const std::string sdk = [] {
+    if (const auto root = llvm::sys::Process::GetEnv("SDKROOT"))
+      if (!root->empty() && *root != "/" && fs::is_directory(fs::u8path(*root)))
+        return *root;
+    auto program = llvm::sys::findProgramByName("xcrun");
+    if (!program)
+      return std::string();
+    llvm::SmallString<128> temporary;
+    int fd = -1;
+    if (llvm::sys::fs::createTemporaryFile("defer-sdk", "txt", fd, temporary))
+      return std::string();
+    llvm::sys::Process::SafelyCloseFileDescriptor(fd);
+    const std::string path(temporary.str());
+    const llvm::StringRef args[] = {*program, "--sdk", "macosx", "--show-sdk-path"};
+    const std::optional<llvm::StringRef> redirects[] = {std::nullopt, llvm::StringRef(path), llvm::StringRef("")};
+    const int result = llvm::sys::ExecuteAndWait(*program, args, std::nullopt, redirects);
+    std::string root;
+    if (result == 0)
+      root = read_file(fs::u8path(path));
+    std::error_code ignored;
+    fs::remove(fs::u8path(path), ignored);
+    while (!root.empty() && (root.back() == '\n' || root.back() == '\r' || root.back() == ' '))
+      root.pop_back();
+    return root;
+  }();
+  return sdk;
+}
+#endif
+
 std::vector<std::string> compile_arguments(const fs::path &database, const fs::path &generated,
                                            const fs::path &source) {
   CompilationDatabase db(database);
@@ -229,13 +260,25 @@ std::vector<std::string> compilation_arguments(const fs::path &database, const f
 }
 
 void add_default_resource_dir(std::vector<std::string> &arguments) {
-  if (std::any_of(arguments.begin(), arguments.end(),
-                  [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; }))
-    return;
-  if (!llvm::sys::findProgramByName("clang"))
-    return;
-  arguments.push_back("-resource-dir");
-  arguments.push_back(compiler_resource_dir("clang"));
+  if (std::none_of(arguments.begin(), arguments.end(),
+                   [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; }) &&
+      llvm::sys::findProgramByName("clang")) {
+    arguments.push_back("-resource-dir");
+    arguments.push_back(compiler_resource_dir("clang"));
+  }
+#ifdef __APPLE__
+  const bool explicit_target = std::any_of(arguments.begin(), arguments.end(), [](const auto &arg) {
+    return arg == "-target" || arg == "--target" || arg.rfind("--target=", 0) == 0 || arg == "-isysroot" ||
+           arg.rfind("-isysroot", 0) == 0 || arg.rfind("--sysroot", 0) == 0 || arg == "-nostdinc";
+  });
+  if (!explicit_target) {
+    const auto sdk = default_macos_sdk();
+    if (!sdk.empty()) {
+      arguments.push_back("-isysroot");
+      arguments.push_back(sdk);
+    }
+  }
+#endif
 }
 
 static bool is_cpp_source(const fs::path &source, const std::vector<std::string> &arguments) {

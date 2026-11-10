@@ -87,6 +87,18 @@ def tool_command(env: dict[str, str]) -> list[str]:
     return [binary] if binary else [sys.executable, str(TOOL)]
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS SDK")
+def test_python_default_sdk_respects_explicit_arguments() -> None:
+    import defer
+
+    default = defer.add_default_resource_dir([])
+    assert "-isysroot" in default
+    explicit = defer.add_default_resource_dir(["-isysroot", "/custom/sdk"])
+    assert explicit.count("-isysroot") == 1
+    cross = defer.add_default_resource_dir(["--target=wasm32-unknown-unknown"])
+    assert "-isysroot" not in cross
+
+
 def test_python_manifest_parse_returns_records() -> None:
     spec = importlib.util.spec_from_file_location("defer_manifest_test", TOOL.parent / "manifest.py")
     assert spec is not None and spec.loader is not None

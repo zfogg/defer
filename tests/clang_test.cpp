@@ -1,4 +1,6 @@
 #include "clang_support.h"
+#include "driver.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #define CHECK(condition)                                                                                               \
@@ -10,6 +12,17 @@
   } while (0)
 
 int main() {
+#ifdef __APPLE__
+  std::vector<std::string> defaults;
+  defer_tool::add_default_resource_dir(defaults);
+  CHECK(std::find(defaults.begin(), defaults.end(), "-isysroot") != defaults.end());
+  std::vector<std::string> explicit_sdk = {"-isysroot", "/custom/sdk"};
+  defer_tool::add_default_resource_dir(explicit_sdk);
+  CHECK(std::count(explicit_sdk.begin(), explicit_sdk.end(), "-isysroot") == 1);
+  std::vector<std::string> cross_target = {"--target=wasm32-unknown-unknown"};
+  defer_tool::add_default_resource_dir(cross_target);
+  CHECK(std::find(cross_target.begin(), cross_target.end(), "-isysroot") == cross_target.end());
+#endif
   defer_tool::ClangIndex index;
   const char code[] = "int answer(void) { return 42; }";
   CXUnsavedFile input = {"memory.c", code, sizeof(code) - 1};

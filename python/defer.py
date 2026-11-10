@@ -48,11 +48,34 @@ def default_resource_dir() -> str | None:
 
 
 def add_default_resource_dir(arguments: list[str]) -> list[str]:
-    """Preserve an explicitly supplied resource directory, or use Clang's."""
-    if any(argument.startswith("-resource-dir") for argument in arguments):
-        return arguments
-    resource = default_resource_dir()
-    return [*arguments, "-resource-dir", resource] if resource else arguments
+    """Supply host Clang resource and macOS SDK paths when not specified."""
+    result = list(arguments)
+    if not any(argument.startswith("-resource-dir") for argument in result):
+        resource = default_resource_dir()
+        if resource:
+            result.extend(["-resource-dir", resource])
+    if sys.platform == "darwin" and not any(
+        argument in ("-target", "--target", "-nostdinc")
+        or argument.startswith(("--target=", "-isysroot", "--sysroot"))
+        for argument in result
+    ):
+        sdk = default_macos_sdk()
+        if sdk:
+            result.extend(["-isysroot", sdk])
+    return result
+
+
+@functools.lru_cache(maxsize=1)
+def default_macos_sdk() -> str | None:
+    """Resolve the host SDK for libclang, which does not run Apple's driver."""
+    root = os.environ.get("SDKROOT")
+    if root and root != "/" and Path(root).is_dir():
+        return root
+    xcrun = shutil.which("xcrun")
+    if not xcrun:
+        return None
+    result = subprocess.run([xcrun, "--sdk", "macosx", "--show-sdk-path"], capture_output=True, text=True, check=False)
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 @functools.lru_cache(maxsize=8)
