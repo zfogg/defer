@@ -17,7 +17,7 @@ ctest --test-dir build --output-on-failure
 cmake --install build --prefix /your/install/prefix
 ```
 
-On Windows, install the Visual Studio C++ build tools and a compatible Clang toolchain, CMake, and Ninja. Use a developer PowerShell for your target architecture so the Windows SDK and linker are available. Extract an LLVM development archive for that architecture containing `include/`, `lib/`, and `bin/libclang.dll`, then point `DEFER_LLVM_DEV_ROOT` at it:
+On Windows, install the Visual Studio C++ build tools and a compatible Clang toolchain, CMake, and Ninja. Use a developer PowerShell for your target architecture so the Windows SDK and linker are available. Download a `clang+llvm-*-x86_64-pc-windows-msvc.tar.xz` or `clang+llvm-*-aarch64-pc-windows-msvc.tar.xz` development archive from [LLVM releases](https://github.com/llvm/llvm-project/releases), as appropriate for your machine. Extract it and point `DEFER_LLVM_DEV_ROOT` at the extracted directory containing `include/`, `lib/`, and `bin/libclang.dll`:
 
 ```powershell
 cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++ `
