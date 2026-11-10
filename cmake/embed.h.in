@@ -1,0 +1,2 @@
+#pragma once
+inline constexpr const char defer_cmake_config[] = R"defer_cmake(@DEFER_CMAKE_CONTENT@)defer_cmake";
