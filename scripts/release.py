@@ -26,7 +26,8 @@ def run(*args: object, cwd: Path = ROOT) -> None:
 
 def download_source(work: Path) -> Path:
     source = work / "llvm-source"
-    if (source / "llvm/CMakeLists.txt").is_file():
+    marker = source / f".complete-{LLVM_VERSION}"
+    if marker.is_file():
         return source
     archive = work / f"llvm-project-{LLVM_VERSION}.src.tar.xz"
     url = f"https://github.com/llvm/llvm-project/releases/download/llvmorg-{LLVM_VERSION}/{archive.name}"
@@ -43,7 +44,7 @@ def download_source(work: Path) -> Path:
     with tarfile.open(archive) as tar:
         for member in tar:
             parts = Path(member.name).parts
-            if len(parts) < 2 or parts[1] not in {"llvm", "clang", "cmake", "libc"}:
+            if len(parts) < 2 or parts[1] not in {"llvm", "clang", "cmake", "libc", "third-party"}:
                 continue
             if any(part in {"test", "tests", "unittests", "examples", "docs", "benchmarks"} for part in parts[2:]):
                 continue
@@ -52,6 +53,7 @@ def download_source(work: Path) -> Path:
                 continue
             member.name = str(Path(*parts[1:]))
             tar.extract(member, source, filter="data")
+    marker.write_text(LLVM_SHA256 + "\n", encoding="utf-8")
     return source
 
 

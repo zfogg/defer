@@ -9,5 +9,6 @@ for transformation and build instructions.
 ```{toctree}
 :maxdepth: 2
 
+semantics
 api
 ```
