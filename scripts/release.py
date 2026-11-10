@@ -85,6 +85,10 @@ def combine_archives(stage: Path, llvm: Path) -> None:
     windows = sys.platform == "win32"
     sdk = stage / "lib" / ("defer-static.lib" if windows else "libdefer-static.a")
     archives = [sdk, *sorted((llvm / "lib").glob("*.lib" if windows else "*.a"))]
+    if sys.platform == "darwin":
+        # Darwin's libtool rejects LLVM's auxiliary target file. The actual
+        # library built by the libclang_static target is libclang.a.
+        archives = [archive for archive in archives if archive.name != "liblibclang_static.a"]
     if len(archives) < 2:
         raise RuntimeError("static LLVM archives are missing")
     combined = sdk.with_name("combined" + sdk.suffix)
@@ -94,7 +98,7 @@ def combine_archives(stage: Path, llvm: Path) -> None:
         run("llvm-lib", f"/OUT:{combined}", f"@{response}")
         response.unlink()
     elif sys.platform == "darwin":
-        run("libtool", "-static", "-o", combined, *archives)
+        run("xcrun", "libtool", "-static", "-o", combined, *archives)
     else:
         script = "CREATE " + str(combined) + "\n" + "".join(f"ADDLIB {path}\n" for path in archives) + "SAVE\nEND\n"
         subprocess.run(["llvm-ar", "-M"], input=script, text=True, check=True)
