@@ -82,6 +82,10 @@ def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path) -> 
     assert (build / "preprocessed" / "other.c").is_file()
     executable = build / ("probe.exe" if sys.platform == "win32" else "probe")
     subprocess.run([executable], check=True)
+    (project / "other.c").write_text("int other(void) { return 4; }\n", encoding="utf-8")
+    rebuilt = subprocess.run([cmake, "--build", str(build)], capture_output=True, text=True, check=False)
+    assert rebuilt.returncode == 0, rebuilt.stdout + rebuilt.stderr
+    assert subprocess.run([executable], check=False).returncode == 1
 
 
 @pytest.mark.parametrize("compiler_name", ["clang", "clang-cl"])
