@@ -8,6 +8,7 @@
 
 namespace defer_tool {
 
+/** Options used to parse and transform a translation unit. */
 struct DriverOptions {
   std::filesystem::path compilation_database;
   std::filesystem::path header_overlay;
@@ -16,16 +17,19 @@ struct DriverOptions {
   bool preamble = false;
 };
 
+/** The generated output path and source files that affect it. */
 struct FileDependencies {
   std::filesystem::path output;
   std::set<std::string> inputs;
 };
 
+/** Transformed source contents and the dependencies used to produce them. */
 struct TransformResult {
   FileDependencies dependencies;
   std::string contents;
 };
 
+/** Read a file as bytes, throwing on failure. */
 std::string read_file(const std::filesystem::path &path);
 std::vector<std::string> compilation_arguments(const std::filesystem::path &database,
                                                const std::filesystem::path &output,

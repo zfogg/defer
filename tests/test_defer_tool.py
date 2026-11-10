@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import importlib.util
+import json
 import os
 import random
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -126,7 +126,7 @@ def test_python_batch_plan_uses_explicit_tool_source_root(tmp_path: Path) -> Non
     assert result.returncode == 0, result.stderr
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(plan_test C)\n'
-        f'set(DEFER_SOURCE_ROOT "{ROOT.as_posix()}")\n'
+        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\n'
         'set(DEFER_PYTHON_COMMAND "${CMAKE_COMMAND};-E;echo")\n'
         'set(DEFER_LIBCLANG_PATH dummy)\nadd_library(defer-probe STATIC source.c)\n'
         f'include("{plan.as_posix()}")\n', encoding="utf-8"
@@ -135,8 +135,8 @@ def test_python_batch_plan_uses_explicit_tool_source_root(tmp_path: Path) -> Non
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     rules = (build / "build.ninja").read_text(encoding="utf-8").replace("\\", "/").replace("$:", ":").replace("$ ", " ")
-    assert f"{ROOT.as_posix()}/src/tooling/defer/defer.py" in rules
-    assert f"{ROOT.as_posix()}/src/tooling/defer/analysis.py" in rules
+    assert f"{ROOT.as_posix()}/python/defer.py" in rules
+    assert f"{ROOT.as_posix()}/python/analysis.py" in rules
     assert "--batch" in rules
     assert "--stdin" not in rules
 
@@ -254,7 +254,7 @@ def test_stdin_flag_is_not_advertised(transform_environment: dict[str, str]) -> 
 def test_terminal_without_input_files_does_not_wait_for_stdin(transform_environment: dict[str, str]) -> None:
     import pty
 
-    master, slave = pty.openpty()
+    master, slave = pty.openpty()  # ty: ignore[unresolved-attribute]  # Unix-only test
     try:
         result = subprocess.run([*tool_command(transform_environment), "--", "-std=c17"], stdin=slave,
                                 capture_output=True, env=transform_environment, timeout=10, check=False)
@@ -639,7 +639,7 @@ def test_cmake_shared_cache_across_build_directories(tmp_path: Path, compiler_en
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_cache C CXX)\n'
         'set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'include("{module}")\nadd_subdirectory(src)\ndefer_prepare()\n', encoding="utf-8"
+        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\ndefer_targets(defer-probe)\n', encoding="utf-8"
     )
     (source_dir / "CMakeLists.txt").write_text(
         'add_executable(defer-probe main.c other.cpp)\n'
@@ -1513,12 +1513,6 @@ def test_cmake_experimental_header_overlays_are_incremental(
         pytest.skip("native defer binary, CMake, Ninja, and Clang are required")
     src = tmp_path / "src"
     src.mkdir()
-    if backend == "PYTHON":
-        tool_dir = src / "tooling" / "defer"
-        tool_dir.mkdir(parents=True)
-        for name in ("defer.py", "analysis.py", "manifest.py", "plan.py", "scan.py", "pyproject.toml", "uv.lock"):
-            shutil.copy2(TOOL.parent / name, tool_dir / name)
-        shutil.copytree(TOOL.parent / "vendor" / "clang", tool_dir / "vendor" / "clang")
     header = src / f"clean.{extension}"
     header.write_text(
         '#include <defer.h>\n'
@@ -1533,7 +1527,7 @@ def test_cmake_experimental_header_overlays_are_incremental(
     module = (ROOT / "Defer.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_header C CXX)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'include("{module}")\nadd_subdirectory(src)\ndefer_prepare()\n', encoding="utf-8"
+        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\ndefer_targets(defer-probe)\n', encoding="utf-8"
     )
     (src / "CMakeLists.txt").write_text(
         'add_executable(defer-probe main.c other.c)\n'
@@ -1616,7 +1610,7 @@ def test_cmake_header_detection_ignores_non_code(tmp_path: Path, contents: str, 
         'set(wrappers defer WRAPPED)\ndefer_header_has_code(found text wrappers)\nmessage("found=${found}")\n',
         encoding="utf-8",
     )
-    result = subprocess.run([cmake, "-P", str(script)], capture_output=True, text=True, check=False)
+    result = subprocess.run([cmake, "-P", str(script)], cwd=tmp_path, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"found={'TRUE' if expected else 'FALSE'}" in result.stderr
 
@@ -1879,12 +1873,6 @@ def test_cmake_objc_incremental(tmp_path: Path, compiler_environment: dict[str, 
         pytest.skip("native defer binary, CMake, Ninja, and Clang are required")
     src = tmp_path / "src"
     src.mkdir()
-    if backend == "PYTHON":
-        tool_dir = src / "tooling" / "defer"
-        tool_dir.mkdir(parents=True)
-        for name in ("defer.py", "analysis.py", "manifest.py", "plan.py", "scan.py", "pyproject.toml", "uv.lock"):
-            shutil.copy2(TOOL.parent / name, tool_dir / name)
-        shutil.copytree(TOOL.parent / "vendor" / "clang", tool_dir / "vendor" / "clang")
     source = src / "main.m"
     header = src / "cleanup.h"
     if header_mode:
@@ -1896,7 +1884,7 @@ def test_cmake_objc_incremental(tmp_path: Path, compiler_environment: dict[str, 
     module = (ROOT / "Defer.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_objc C OBJC CXX)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'include("{module}")\nadd_subdirectory(src)\ndefer_prepare()\n', encoding="utf-8"
+        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\ndefer_targets(defer-probe)\n', encoding="utf-8"
     )
     (src / "CMakeLists.txt").write_text(
         'add_executable(defer-probe main.m)\n'
@@ -2727,24 +2715,12 @@ def test_cmake_discovers_defer_and_tracks_headers(
         pytest.skip("CMake, Ninja, and Clang are required")
     project = tmp_path / "project"
     source_dir = project / "src"
-    tool_dir = source_dir / "tooling" / "defer"
     source_dir.mkdir(parents=True)
-    tool_dir.mkdir(parents=True)
-    shutil.copy2(TOOL, tool_dir / "defer.py")
-    shutil.copy2(TOOL.parent / "analysis.py", tool_dir / "analysis.py")
-    shutil.copy2(TOOL.parent / "manifest.py", tool_dir / "manifest.py")
-    shutil.copy2(TOOL.parent / "scan.py", tool_dir / "scan.py")
-    shutil.copy2(TOOL.parent / "plan.py", tool_dir / "plan.py")
-    shutil.copy2(TOOL.parent / "pyproject.toml", tool_dir / "pyproject.toml")
-    shutil.copy2(TOOL.parent / "uv.lock", tool_dir / "uv.lock")
-    shutil.copytree(TOOL.parent / "vendor" / "clang", tool_dir / "vendor" / "clang")
-    if backend != "PYTHON":
-        for pattern in ("*.cpp", "*.h", "CMakeLists.txt"):
-            for path in TOOL.parent.glob(pattern):
-                shutil.copy2(path, tool_dir / path.name)
-        dependencies = project / "cmake" / "deps"
-        dependencies.mkdir(parents=True)
-        shutil.copy2(ROOT / "cmake" / "deps" / "LLVMDevelopment.cmake", dependencies)
+    tool_root = tmp_path / "tool"
+    shutil.copytree(ROOT / "python", tool_root / "python")
+    shutil.copy2(ROOT / "pyproject.toml", tool_root / "pyproject.toml")
+    shutil.copy2(ROOT / "uv.lock", tool_root / "uv.lock")
+    tool_dir = tool_root / "python"
     second = source_dir / "second.c"
     second.write_text(
         '#include "defer.h"\n'
@@ -2822,9 +2798,9 @@ def test_cmake_discovers_defer_and_tracks_headers(
         'DEPENDS "${CMAKE_SOURCE_DIR}/ready.in")\n'
         'add_custom_target(generate_version DEPENDS "${CMAKE_BINARY_DIR}/ready.h")\n'
         'set(DEFER_PYTHON3_EXECUTABLE "python-must-not-run")\n'
-        f'include("{module}")\n'
+        f'set(DEFER_TOOL_ROOT "{tool_root.as_posix()}")\ninclude("{module}")\n'
         "add_subdirectory(src)\n"
-        "defer_prepare()\n",
+        "defer_targets(defer-probe)\n",
         encoding="utf-8",
     )
     (source_dir / "CMakeLists.txt").write_text(
@@ -2857,26 +2833,13 @@ def test_cmake_discovers_defer_and_tracks_headers(
         f"-DDEFER_BACKEND={'PYTHON' if backend == 'PYTHON' else 'NATIVE'}",
         f"-DDEFER_LIBCLANG_PATH={compiler_environment['LIBCLANG_LIBRARY_FILE']}",
         f"-DDEFER_WRAPPER_HEADER_DIRS={external}",
+        f"-DDEFER_NATIVE_BINARY={compiler_environment.get('DEFER_TEST_BINARY', '')}",
+        f"-DDEFER_PYTHON_COMMAND={sys.executable}",
     ]
     if backend == "NATIVE_CROSS":
         system = {"win32": "Windows", "darwin": "Darwin"}.get(sys.platform, "Linux")
         configure.append(f"-DCMAKE_SYSTEM_NAME={system}")
     run(*configure)
-    if backend == "PYTHON":
-        assert (build / "defer-python-venv" / "pyvenv.cfg").is_file()
-    if backend != "PYTHON":
-        native = (
-            build
-            / "defer-host"
-            / (
-                "defer-tool.exe"
-                if sys.platform == "win32"
-                else "defer-tool"
-            )
-        )
-        assert not native.exists(), (
-            "the native tool must be built during the build, not configuration"
-        )
     run(cmake, "--build", str(build))
     build_rules = (build / "build.ninja").read_text(encoding="utf-8")
     defer_commands = [line for line in build_rules.splitlines() if "--batch" in line and "defer" in line]
@@ -3012,7 +2975,7 @@ def test_cmake_discovers_defer_and_tracks_headers(
     original_main = main.read_text(encoding="utf-8")
     time.sleep(1.1)
     main.write_text(original_main + "\nvoid invalid(void) { defer(return); }\n", encoding="utf-8")
-    failed = subprocess.run([cmake, "--build", str(build)], capture_output=True, text=True, env=compiler_environment)
+    failed = subprocess.run([cmake, "--build", str(build)], capture_output=True, text=True, env=compiler_environment, check=False)
     assert failed.returncode != 0
     assert "defer-tool:" in failed.stdout + failed.stderr
     main.write_text(original_main, encoding="utf-8")

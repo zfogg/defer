@@ -1,0 +1,18 @@
+:root { color-scheme: light dark; --bg:#f8f6f0; --fg:#22332d; --muted:#52655c; --line:#ced9d0; --card:#fff; --accent:#12684b; }
+@media(prefers-color-scheme:dark) { :root { --bg:#121c18; --fg:#e8efe8; --muted:#adbbb1; --line:#35483d; --card:#1c2a22; --accent:#91d6ad; } }
+body.docs-home { margin:0; padding:0; background:var(--bg); color:var(--fg); font:18px/1.6 system-ui,sans-serif; }
+.docs-home main { max-width:1000px; margin:auto; padding:8vh 6vw 5rem; }
+.docs-home .eyebrow { color:var(--accent); font-size:.8rem; font-weight:700; letter-spacing:.15em; text-transform:uppercase; }
+.docs-home h1 { font-size:clamp(3rem,9vw,6rem); letter-spacing:-.06em; line-height:1.05; margin:1rem 0; }
+.docs-home .lead { max-width:700px; font-size:1.3rem; color:var(--muted); }
+.docs-home .languages { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin:3rem 0; }
+.docs-home .language { display:block; padding:1.5rem; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--fg); text-decoration:none; }
+.docs-home .language:hover { border-color:var(--accent); }
+.docs-home .language strong { display:block; font-size:1.6rem; }
+.docs-home .language span,.docs-home footer { color:var(--muted); font-size:.9rem; }
+.docs-home a { color:var(--accent); }
+.docs-home pre { overflow:auto; padding:1.5rem; border:1px solid var(--line); border-radius:12px; background:var(--card); font-size:.9rem; }
+#language-nav { position:fixed; top:auto; bottom:12px; left:auto; right:12px; width:max-content; height:auto; min-height:0; max-height:calc(100vh - 24px); max-width:calc(100vw - 24px); box-sizing:border-box; margin:0; z-index:10000; display:flex; align-items:center; gap:12px; flex-wrap:wrap; overflow:auto; padding:10px 16px; border:1px solid #82938a; border-radius:10px; background:#182b23; box-shadow:0 3px 12px #0003; font:14px/1.5 system-ui,sans-serif; }
+#language-nav a { color:#f0f7ee; text-decoration:underline; text-underline-offset:3px; }
+#language-nav a:hover { text-decoration:underline; }
+#language-nav a[aria-current="page"] { font-weight:700; }

@@ -1,5 +1,5 @@
 BUILD_DIR ?= build
-PREFIX ?= /usr/local
+PREFIX ?= $(HOME)/.local
 CMAKE_FLAGS ?=
 .PHONY: build install format format-check test
 build:

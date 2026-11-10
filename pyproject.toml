@@ -7,8 +7,16 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "pytest>=8,<10",
+    "pytest-xdist>=3,<4",
     "ruff>=0.14,<1",
     "ty>=0.0.99,<0.1",
+]
+docs = [
+    "hawkmoth>=0.22,<1",
+    "myst-parser>=4,<6",
+    "pdoc>=15,<17",
+    "sphinx>=8,<10",
 ]
 [tool.ruff]
 extend-exclude = ["python/vendor"]

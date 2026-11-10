@@ -56,16 +56,16 @@ def main() -> int:
         name = cmake_literal(f"defer-{batch_id}")
         rules.append(f"""add_custom_command(
     OUTPUT {outputs} {stamps} {overlays}
-    COMMAND ${{DEFER_PYTHON_COMMAND}} "${{DEFER_SOURCE_ROOT}}/src/tooling/defer/defer.py"
+    COMMAND ${{DEFER_PYTHON_COMMAND}} "${{DEFER_TOOL_ROOT}}/python/defer.py"
         --batch {cmake_literal(manifest.as_posix())} --libclang "${{DEFER_LIBCLANG_PATH}}"
         --compilation-database "${{CMAKE_BINARY_DIR}}" --depfile {cmake_literal(depfile.as_posix())} --dependency-stamps {overlay_argument}
     DEPENDS {sources} {cmake_literal(manifest.as_posix())}
-        "${{DEFER_SOURCE_ROOT}}/src/tooling/defer/defer.py"
-        "${{DEFER_SOURCE_ROOT}}/src/tooling/defer/analysis.py"
-        "${{DEFER_SOURCE_ROOT}}/src/tooling/defer/manifest.py"
-        "${{DEFER_SOURCE_ROOT}}/src/tooling/defer/pyproject.toml"
-        "${{DEFER_SOURCE_ROOT}}/src/tooling/defer/uv.lock"
-        "${{DEFER_SOURCE_ROOT}}/src/tooling/defer/vendor/clang/cindex.py"
+        "${{DEFER_TOOL_ROOT}}/python/defer.py"
+        "${{DEFER_TOOL_ROOT}}/python/analysis.py"
+        "${{DEFER_TOOL_ROOT}}/python/manifest.py"
+        "${{DEFER_TOOL_ROOT}}/pyproject.toml"
+        "${{DEFER_TOOL_ROOT}}/uv.lock"
+        "${{DEFER_TOOL_ROOT}}/python/vendor/clang/cindex.py"
         "${{CMAKE_BINARY_DIR}}/compile_commands.json"
     DEPFILE {cmake_literal(depfile.as_posix())}
     COMMENT "Transforming defer source batch" VERBATIM)

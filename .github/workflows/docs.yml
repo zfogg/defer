@@ -1,0 +1,42 @@
+name: Documentation
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
+      - name: Locate libclang
+        run: |
+          libclang="$(find /usr/lib/llvm-* -name libclang.so -print -quit)"
+          test -n "$libclang"
+          echo "LIBCLANG_LIBRARY_FILE=$libclang" >> "$GITHUB_ENV"
+          echo "LLVM_INCLUDE_DIR=$(dirname "$(dirname "$libclang")")/include" >> "$GITHUB_ENV"
+      - run: cmake -S docs -B build/docs
+      - run: cmake --build build/docs --target docs
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/docs/site
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4
