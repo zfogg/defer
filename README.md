@@ -124,9 +124,16 @@ The module also accepts these CMake variables:
 | `DEFER_HEADER_OVERLAYS` | `AUTO` (default), `ON`, or `OFF`. |
 | `DEFER_SHARED_CACHE` | Directory for the native shared transformation cache. |
 | `DEFER_WRAPPER_HEADER_DIRS` | Additional directories containing defer wrapper macros. |
+| `DEFER_SOURCE_HOOK` | Optional CMake function that preprocesses eligible sources before defer. |
 | `DEFER_TOOL_ROOT` | Standalone source checkout used by the Python backend. |
 | `DEFER_PYTHON_COMMAND` | Python command used by the Python backend. |
 | `DEFER_LIBCLANG_PATH` | Shared libclang library used by the Python backend; defaults to `LIBCLANG_LIBRARY_FILE` if set. |
+
+The optional source hook is called as `hook(output_variable target source relative_path compiled_path)`.
+Set the output variable in the parent scope to the original source or a generated source. The
+generated source must have a build rule and preserve defer statements for the next stage.
+`compiled_path` identifies the defer output in the compilation database, or is empty when the
+source has no defer. The hook is responsible for tracking its generated file's dependencies.
 
 For a release archive, CMake can download the appropriate host archive and generate the module during configuration. Set `DEFER_ARCHIVE_URL` to a versioned release ZIP and `DEFER_ARCHIVE_SHA256` to its published checksum:
 
