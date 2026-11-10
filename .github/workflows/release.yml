@@ -14,6 +14,7 @@ jobs:
   native:
     strategy:
       fail-fast: false
+      max-parallel: 5
       matrix:
         include:
           - { name: windows-amd64, runner: windows-2022, os: windows, arch: amd64 }

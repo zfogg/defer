@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from pdoc.render_helpers import to_html
+
 ROOT = Path(__file__).resolve().parents[1]
 LANGUAGES = {"cpp": "C++", "python": "Python"}
 
@@ -23,7 +25,20 @@ def main() -> None:
     python_dir = ROOT / "python"
     os.environ["PYTHONPATH"] = os.pathsep.join([str(python_dir), str(python_dir / "vendor"), os.environ.get("PYTHONPATH", "")])
     run(sys.executable, "-m", "sphinx", "-b", "html", "-W", "--keep-going", str(ROOT / "docs" / "cpp"), str(output / "cpp"))
-    run(sys.executable, "-m", "pdoc", "-o", str(output / "python"), *(str(python_dir / f"{name}.py") for name in ("defer", "analysis", "manifest")))
+    run(sys.executable, "-m", "pdoc", "--docformat", "markdown", "-t", str(ROOT / "docs" / "pdoc"),
+        "-o", str(output / "python"), *(str(python_dir / f"{name}.py") for name in ("defer", "analysis", "manifest")))
+    landing = output / "python" / "index.html"
+    text = landing.read_text(encoding="utf-8")
+    marker = '<main class="pdoc"></main>'
+    if marker not in text:
+        raise RuntimeError("pdoc's Python landing-page placeholder was not found")
+    readme = to_html((python_dir / "README.md").read_text(encoding="utf-8"))
+    readme = re.sub(
+        r'href="(?!(?:https?:|mailto:|#))((?:\.\./)*[^"#]+)',
+        lambda match: f'href="https://github.com/zfogg/defer/blob/main/{match[1].lstrip("./")}',
+        readme,
+    )
+    landing.write_text(text.replace(marker, f'<main class="pdoc"><section class="module-info python-landing">{readme}</section></main>'), encoding="utf-8")
     shutil.copyfile(ROOT / "docs" / "site.css", output / "site.css")
     description = "Block-scoped cleanup for C and Objective-C, with C++ and Python tooling."
     cards = "".join(f'<a class="language" href="{key}/"><strong>{label}</strong><span>API reference →</span></a>' for key, label in LANGUAGES.items())
@@ -59,8 +74,15 @@ def main() -> None:
     for required in ("index.html", "cpp/index.html", "cpp/api.html", "python/index.html", "python/defer.html"):
         if not (output / required).is_file():
             raise RuntimeError(f"missing generated documentation page: {required}")
-    if "defer_tool::transform" not in (output / "cpp/api.html").read_text(encoding="utf-8"):
+    api_page = (output / "cpp/api.html").read_text(encoding="utf-8")
+    if 'class="sig sig-object cpp"' not in api_page or 'id="c.defer_transform_source"' not in api_page:
         raise RuntimeError("native API documentation did not include the transformer")
+    if ".. cpp:function::" in api_page or ".. c:function::" in api_page:
+        raise RuntimeError("native API directives were not rendered")
+    if "Native C++ tool and SDK" not in (output / "cpp/index.html").read_text(encoding="utf-8"):
+        raise RuntimeError("C++ landing page did not render its README")
+    if "Python defer tool" not in landing.read_text(encoding="utf-8"):
+        raise RuntimeError("Python landing page did not render its README")
 
 
 if __name__ == "__main__":

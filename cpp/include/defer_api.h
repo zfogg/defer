@@ -10,9 +10,10 @@ extern "C" {
  *
  * The filename is a virtual source path for language detection, diagnostics,
  * and relative include lookup. Arguments are Clang parser flags, without a
- * compiler executable or input path. On success returns zero, sets *output and
- * *output_size, and sets *error to NULL. On failure returns nonzero, sets
- * *output to NULL, and optionally returns an allocated diagnostic in *error.
+ * compiler executable or input path. On success returns zero, sets ``*output``
+ * and ``*output_size``, and sets ``*error`` to NULL. On failure returns
+ * nonzero, sets ``*output`` to NULL, and optionally returns an allocated
+ * diagnostic in ``*error``.
  * Release both output and error using defer_free_buffer, not the caller's free.
  */
 int defer_transform_source(const char *filename, const char *source, size_t source_size, const char *const *arguments,
