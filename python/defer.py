@@ -156,20 +156,6 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
                 f"cannot determine resource directory for {compiler}: {process.stderr}"
             )
         result.extend(["-resource-dir", process.stdout.strip()])
-    for index, value in enumerate(result):
-        target = (result[index + 1] if value in ("-target", "--target") and index + 1 < len(result)
-                  else value.removeprefix("--target=") if value.startswith("--target=") else "")
-        if "-musl" in target and "-nostdlibinc" not in result:
-            result.append("-nostdlibinc")
-            break
-    for include_dir in os.environ.get("DEFER_EXTRA_INCLUDE_DIRS", "").split(";"):
-        if include_dir:
-            result.extend(["-I", include_dir])
-    target = os.environ.get("DEFER_TARGET_TRIPLE")
-    if target:
-        result.extend(["-target", target])
-        if "-musl" in target:
-            result.append("-nostdlibinc")
     return result
 
 

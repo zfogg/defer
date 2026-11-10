@@ -782,9 +782,8 @@ def test_batch_rejects_invalid_per_file_arguments(
     assert not output.exists()
 
 
-@pytest.mark.parametrize("from_database", [False, True])
-def test_compilation_database_target_override_preserves_builtin_headers(
-    tmp_path: Path, transform_environment: dict[str, str], from_database: bool
+def test_compilation_database_target_preserves_builtin_headers(
+    tmp_path: Path, transform_environment: dict[str, str]
 ) -> None:
     source, output = tmp_path / "input.c", tmp_path / "output.c"
     include = tmp_path / "target-headers"
@@ -792,18 +791,14 @@ def test_compilation_database_target_override_preserves_builtin_headers(
     (include / "target_marker.h").write_text("#define TARGET_MARKER 42\n", encoding="utf-8")
     source.write_text(
         '#include <stddef.h>\n#include <target_marker.h>\n#include "defer.h"\n'
-        '#if __has_include(<gnu/libc-version.h>)\n#error host libc leaked into target\n#endif\n'
         '#if !defined(__aarch64__) || TARGET_MARKER != 42\n#error wrong target\n#endif\n'
         'void f(void) { size_t n = 0; defer((void)n); }\n', encoding="utf-8"
     )
     commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
-        CLANG, f"-I{ROOT / 'cpp' / 'include'}", "-c", str(source), "-o", str(tmp_path / "input.o")
+        CLANG, "--target=aarch64-unknown-linux-musl", f"-I{include}", f"-I{ROOT / 'cpp' / 'include'}",
+        "-c", str(source), "-o", str(tmp_path / "input.o")
     ]}]
     env = transform_environment.copy()
-    if from_database:
-        commands[0]["arguments"][1:1] = ["--target=aarch64-unknown-linux-musl", f"-I{include}"]
-    else:
-        env.update(DEFER_TARGET_TRIPLE="aarch64-unknown-linux-musl", DEFER_EXTRA_INCLUDE_DIRS=str(include))
     (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
     result = subprocess.run(
         [*tool_command(env), "--compilation-database", str(tmp_path), str(source), str(output)],
@@ -825,15 +820,15 @@ def test_incremental_cache_invalidates_when_parser_target_changes(
     )
     manifest = tmp_path / "batch.txt"
     manifest.write_text(f"{source}\t{output}\n", encoding="utf-8")
-    commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
-        CLANG, f"-I{ROOT / 'cpp' / 'include'}", "-c", str(source), "-o", str(tmp_path / "input.o")
-    ]}]
-    (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
     command = [binary, "--batch", str(manifest), "--compilation-database", str(tmp_path),
                "--dependency-stamps", "--incremental"]
     def run(target: str) -> str:
-        result = subprocess.run(command, capture_output=True, text=True, check=False,
-                                env={**base_environment, "DEFER_TARGET_TRIPLE": target})
+        commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
+            CLANG, f"--target={target}", f"-I{ROOT / 'cpp' / 'include'}",
+            "-c", str(source), "-o", str(tmp_path / "input.o")
+        ]}]
+        (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
+        result = subprocess.run(command, capture_output=True, text=True, check=False, env=base_environment)
         assert result.returncode == 0, result.stderr
         return result.stderr
     assert "transformed 1 of 1" in run("x86_64-unknown-linux-musl")

@@ -240,39 +240,6 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     result.push_back("-resource-dir");
     result.push_back(compiler_resource_dir(compiler_path.u8string()));
   }
-  for (std::size_t i = 0; i < result.size(); ++i) {
-    const auto &arg = result[i];
-    const bool musl_target = ((arg == "-target" || arg == "--target") && i + 1 < result.size() &&
-                              result[i + 1].find("-musl") != std::string::npos) ||
-                             (arg.rfind("--target=", 0) == 0 && arg.find("-musl") != std::string::npos);
-    if (musl_target && std::find(result.begin(), result.end(), "-nostdlibinc") == result.end()) {
-      result.push_back("-nostdlibinc");
-      break;
-    }
-  }
-  if (const auto extra = llvm::sys::Process::GetEnv("DEFER_EXTRA_INCLUDE_DIRS")) {
-    const std::string &value = *extra;
-    std::size_t start = 0;
-    while (start <= value.size()) {
-      const auto end = value.find(';', start);
-      const auto directory = value.substr(start, end == std::string::npos ? std::string::npos : end - start);
-      if (!directory.empty()) {
-        result.push_back("-I");
-        result.push_back(directory);
-      }
-      if (end == std::string::npos)
-        break;
-      start = end + 1;
-    }
-  }
-  if (const auto target = llvm::sys::Process::GetEnv("DEFER_TARGET_TRIPLE")) {
-    if (!target->empty()) {
-      result.insert(result.end(), {"-target", *target});
-      // Keep Clang's builtin headers while excluding the host libc headers.
-      if (target->find("-musl") != std::string::npos)
-        result.push_back("-nostdlibinc");
-    }
-  }
   return result;
 }
 

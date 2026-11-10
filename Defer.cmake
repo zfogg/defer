@@ -325,10 +325,7 @@ function(defer_finish_batches)
                 set(_extra_arguments "")
             endif()
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
-                COMMAND ${CMAKE_COMMAND} -E env
-                    "DEFER_EXTRA_INCLUDE_DIRS=${DEFER_EXTRA_INCLUDE_DIRS}"
-                    "DEFER_TARGET_TRIPLE=${DEFER_TARGET_TRIPLE}"
-                    "$<TARGET_FILE:defer-native>" --batch "${_manifest}"
+                COMMAND "$<TARGET_FILE:defer-native>" --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                     ${_extra_arguments}
                 DEPENDS ${_sources} "${_manifest}" defer-native "${CMAKE_BINARY_DIR}/compile_commands.json"
