@@ -3,6 +3,9 @@
 The source transformer reports unsupported control flow as an exception rather
 than emitting code whose cleanup behavior cannot be proven.
 
+```{c:autodoc} defer_api.h
+```
+
 ```{cpp:autodoc} transform.h
 ```
 

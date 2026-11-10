@@ -46,7 +46,7 @@ The module uses batch transformation and the compilation database, supports incr
 For a release archive, CMake can download the appropriate host archive and generate the module during configuration. Set `DEFER_ARCHIVE_URL` to a versioned release ZIP and `DEFER_ARCHIVE_SHA256` to its published checksum:
 
 ```cmake
-set(_defer_dir "${CMAKE_BINARY_DIR}/defer-release")
+set(_defer_dir "${CMAKE_BINARY_DIR}/defer-release/${DEFER_ARCHIVE_SHA256}")
 file(MAKE_DIRECTORY "${_defer_dir}")
 if(NOT EXISTS "${_defer_dir}/defer.zip")
   file(DOWNLOAD "${DEFER_ARCHIVE_URL}" "${_defer_dir}/defer.zip"
@@ -86,6 +86,8 @@ auto generated = defer_tool::transform_source("src/example.c", source, {"-std=c1
 ```
 
 The virtual filename determines language detection, diagnostics, and relative include lookup. Transformation failures throw an exception; the API does not overwrite the source file. Release archives include the SDK libraries, public headers, and the Clang C headers used by the lower-level API.
+
+For a C ABI suitable for shared-library boundaries, include `defer_api.h` and call `defer_transform_source`. Release every returned output or error with `defer_free_buffer`, which frees it in the library that allocated it. The C++ API exposes a C++ ABI, so use a compatible compiler, standard library, and architecture when linking it. The Windows release libraries use the static MSVC runtime (`MultiThreaded` in CMake). The bundled static SDK archive contains its LLVM and libclang implementation; platform system libraries such as threads and `dl` may still need to be linked by the consumer.
 
 ## Building and testing
 

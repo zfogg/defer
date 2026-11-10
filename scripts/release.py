@@ -120,11 +120,13 @@ def verify_sdk(work: Path, stage: Path, cxx: str) -> None:
     source = work / "sdk-smoke"
     source.mkdir(exist_ok=True)
     (source / "main.cpp").write_text(
-        '#include "api.h"\n#include <iostream>\n'
+        '#include "defer_api.h"\n#include <cstring>\n#include <iostream>\n#include <string>\n'
         'int main(int argc, char** argv) { if (argc != 2) return 1; '
-        'auto output = defer_tool::transform_source("sdk.c", '
-        '"#include \\\"defer.h\\\"\\nvoid f(void) { defer((void)0); }\\n", {std::string("-I") + argv[1]}); '
-        'if (output.find("__defer_active_") == std::string::npos) return 2; '
+        'const char* source = "#include \\\"defer.h\\\"\\nvoid f(void) { defer((void)0); }\\n"; '
+        'std::string flag = std::string("-I") + argv[1]; const char* flags[] = {flag.c_str()}; '
+        'char *output = nullptr, *error = nullptr; size_t size = 0; '
+        'if (defer_transform_source("sdk.c", source, strlen(source), flags, 1, &output, &size, &error)) return 2; '
+        'if (!output || !strstr(output, "__defer_active_")) return 3; defer_free_buffer(output); '
         'std::cout << "SDK smoke test\\n"; return 0; }\n', encoding="utf-8"
     )
     (source / "CMakeLists.txt").write_text(
