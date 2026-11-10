@@ -10,7 +10,9 @@ import importlib.metadata
 import json
 import os
 import re
+import shlex
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +35,42 @@ from analysis import (
     transform_input,
 )
 from manifest import Manifest, ManifestError
+
+
+@functools.cache
+def emscripten_driver_defaults(compiler: str) -> list[str]:
+    process = subprocess.run([compiler, "--cflags"], capture_output=True, text=True, check=False)
+    if process.returncode:
+        raise TransformError(f"cannot query Emscripten compiler flags: {process.stderr}")
+    flags = shlex.split(process.stdout)
+    result: list[str] = []
+    sysroot = ""
+    index = 0
+    while index < len(flags):
+        flag = flags[index]
+        if flag in ("-target", "--target", "--sysroot") and index + 1 < len(flags):
+            result.extend(flags[index:index + 2])
+            if flag == "--sysroot":
+                sysroot = flags[index + 1]
+            index += 2
+            continue
+        if flag.startswith(("--target=", "--sysroot=")):
+            result.append(flag)
+            if flag.startswith("--sysroot="):
+                sysroot = flag.removeprefix("--sysroot=")
+        elif flag == "-Xclang" and index + 1 < len(flags) and flags[index + 1].startswith("-iwithsysroot"):
+            result.extend(flags[index:index + 2])
+            index += 2
+            continue
+        index += 1
+    if not sysroot:
+        raise TransformError(f"Emscripten did not report a sysroot: {compiler}")
+    if not (Path(sysroot) / "include" / "emscripten" / "emscripten.h").is_file():
+        process = subprocess.run([compiler, "-E", "-x", "c", "-"], input="", stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.PIPE, text=True, check=False)
+        if process.returncode:
+            raise TransformError(f"cannot initialize Emscripten sysroot: {process.stderr}")
+    return result
 
 
 @functools.lru_cache(maxsize=1)
@@ -79,14 +117,28 @@ def default_macos_sdk() -> str | None:
 
 
 @functools.lru_cache(maxsize=8)
-def compilation_database_files(directory: Path, mtime: int, size: int) -> dict[str, int]:
+def cached_compilation_database(directory: Path, mtime: int, size: int) -> cindex.CompilationDatabase:
     del mtime, size
-    database = cindex.CompilationDatabase.fromDirectory(str(directory))
+    return cindex.CompilationDatabase.fromDirectory(str(directory))
+
+
+@functools.lru_cache(maxsize=8)
+def compilation_database_files(directory: Path, mtime: int, size: int) -> dict[str, int]:
+    database = cached_compilation_database(directory, mtime, size)
     commands = database.getAllCompileCommands()
     counts: dict[str, int] = {}
+    parents: dict[Path, Path] = {}
     if commands is not None:
         for command in commands:
-            key = os.path.normcase(str((Path(command.directory) / command.filename).resolve()))
+            path = (Path(command.directory) / command.filename).absolute()
+            if path.parent not in parents:
+                parents[path.parent] = path.parent.resolve()
+            candidate = parents[path.parent] / path.name
+            try:
+                is_symlink = stat.S_ISLNK(candidate.lstat().st_mode)
+            except (FileNotFoundError, NotADirectoryError):
+                is_symlink = False
+            key = os.path.normcase(str(candidate.resolve() if is_symlink else candidate))
             counts[key] = counts.get(key, 0) + 1
     return counts
 
@@ -94,8 +146,8 @@ def compilation_database_files(directory: Path, mtime: int, size: int) -> dict[s
 def compilation_arguments(directory: Path, generated: Path, source: Path) -> list[str]:
     """Recover the target's compile options from CMake's compilation database."""
     directory = directory.resolve()
-    database = cindex.CompilationDatabase.fromDirectory(str(directory))
     metadata = (directory / "compile_commands.json").stat()
+    database = cached_compilation_database(directory, metadata.st_mtime_ns, metadata.st_size)
     counts = compilation_database_files(directory, metadata.st_mtime_ns, metadata.st_size)
     generated, source = generated.resolve(), source.resolve()
     selected = generated if counts.get(os.path.normcase(str(generated)), 0) else source
@@ -111,6 +163,9 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
     compiler = arguments.pop(0)
     os.chdir(command.directory)
     result = ["-iquote", str(source.resolve().parent)]
+    emscripten = "emcc" in compiler or "em++" in compiler
+    if emscripten:
+        result.extend(emscripten_driver_defaults(compiler))
     index = 0
     while index < len(arguments):
         value = arguments[index]
@@ -136,9 +191,22 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             and Path(arguments[index + 1][7:]).resolve() == Path(str(generated.resolve().parent) + ".vfs.json").resolve()):
             index += 2
             continue
+        if emscripten and value == "-s" and index + 1 < len(arguments):
+            index += 2
+            continue
+        if emscripten and ((value.startswith("-s") and len(value) > 2 and value[2].isupper())
+                           or value in ("-msimd128", "-Wno-error=pthreads-mem-growth")):
+            index += 1
+            continue
+        if value in ("-I", "-isystem", "-iquote", "-idirafter", "-include", "-imacros", "-isysroot",
+                     "--sysroot", "-target", "--target", "-resource-dir", "-Xclang", "-D", "-U", "-x") and index + 1 < len(arguments):
+            result.extend(arguments[index:index + 2])
+            index += 2
+            continue
         if (
             value in ("--", "-c", "/c", "-MD", "-MMD", "-MP")
-            or Path(value).resolve() == selected
+            or (not value.startswith("-") and
+                (Path(value).absolute() == selected or Path(value).resolve() == selected))
         ):
             index += 1
             continue
@@ -156,14 +224,6 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
                 f"cannot determine resource directory for {compiler}: {process.stderr}"
             )
         result.extend(["-resource-dir", process.stdout.strip()])
-    for include_dir in os.environ.get("DEFER_EXTRA_INCLUDE_DIRS", "").split(";"):
-        if include_dir:
-            result.extend(["-I", include_dir])
-    target = os.environ.get("DEFER_TARGET_TRIPLE")
-    if target:
-        result.extend(["-target", target])
-        if "-musl" in target:
-            result.append("-nostdlibinc")
     return result
 
 

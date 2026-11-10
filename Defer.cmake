@@ -87,7 +87,7 @@ function(defer_collect_headers out_var directory is_root allow_build)
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
             execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune}
                 \( -type f -o -type l \) \( -name "*.h" -o -name "*.hpp" -o -name "*.hh"
-                -o -name "*.hxx" -o -name "*.inc" -o -name "*.def" \) -print
+                -o -name "*.hxx" -o -name "*.inc" -o -name "*.def" -o -name "*.m" -o -name "*.mm" \) -print
                 OUTPUT_VARIABLE _header_output RESULT_VARIABLE _header_result ERROR_VARIABLE _header_error
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
             if(NOT _directory_result EQUAL 0 OR NOT _header_result EQUAL 0)
@@ -113,7 +113,7 @@ function(defer_collect_headers out_var directory is_root allow_build)
         if(IS_DIRECTORY "${_entry}")
             defer_collect_headers(_nested "${_entry}" FALSE "${allow_build}")
             list(APPEND _headers ${_nested})
-        elseif(_entry MATCHES "\\.(h|hpp|hh|hxx|inc|def)$")
+        elseif(_entry MATCHES "\\.(h|hpp|hh|hxx|inc|def|m|mm)$")
             list(APPEND _headers "${_entry}")
         endif()
     endforeach()
@@ -229,10 +229,6 @@ function(defer_apply_target target)
         if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
             set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_absolute}")
         endif()
-        if(NOT _absolute IN_LIST _defer_sources)
-            list(APPEND _new_sources "${_source}")
-            continue()
-        endif()
         # Give every translation unit its own output directory. Clang searches
         # the generated file's directory before -iquote; putting generated
         # siblings together can shadow a quoted include from the source tree.
@@ -241,6 +237,38 @@ function(defer_apply_target target)
         set(_dependency_stamp "${CMAKE_BINARY_DIR}/defer_transformed/${target}/${_relative}.defer.deps")
         set(_header_overlay "${CMAKE_BINARY_DIR}/defer_transformed/${target}/${_relative}.defer.vfs.json")
         set(_transform_input "${_absolute}")
+        if(DEFER_SOURCE_HOOK)
+            if(_absolute IN_LIST _defer_sources)
+                set(_hook_compiled "${_generated}")
+            else()
+                set(_hook_compiled "")
+            endif()
+            cmake_language(CALL "${DEFER_SOURCE_HOOK}" _transform_input "${target}" "${_absolute}" "${_relative}" "${_hook_compiled}")
+        endif()
+        if(NOT _absolute IN_LIST _defer_sources)
+            if(NOT _transform_input STREQUAL _absolute)
+                foreach(_property COMPILE_DEFINITIONS COMPILE_OPTIONS COMPILE_FLAGS INCLUDE_DIRECTORIES OBJECT_DEPENDS)
+                    get_property(_has_property SOURCE "${_absolute}" TARGET_DIRECTORY "${target}" PROPERTY "${_property}" SET)
+                    if(_has_property)
+                        get_property(_value SOURCE "${_absolute}" TARGET_DIRECTORY "${target}" PROPERTY "${_property}")
+                        set_property(SOURCE "${_transform_input}" TARGET_DIRECTORY "${target}" PROPERTY "${_property}" "${_value}")
+                    endif()
+                endforeach()
+                get_filename_component(_original_dir "${_absolute}" DIRECTORY)
+                if(CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+                    set_property(SOURCE "${_transform_input}" TARGET_DIRECTORY "${target}" APPEND PROPERTY COMPILE_OPTIONS
+                        "-clang:-iquote" "-clang:${_original_dir}")
+                else()
+                    set_property(SOURCE "${_transform_input}" TARGET_DIRECTORY "${target}" APPEND PROPERTY COMPILE_OPTIONS
+                        "-iquote" "${_original_dir}")
+                endif()
+                set_source_files_properties("${_transform_input}" TARGET_DIRECTORY "${target}" PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE)
+                list(APPEND _new_sources "${_transform_input}")
+            else()
+                list(APPEND _new_sources "${_source}")
+            endif()
+            continue()
+        endif()
         get_filename_component(_original_dir "${_absolute}" DIRECTORY)
         set(_batch_prerequisites "")
         if(_prerequisites)
@@ -325,10 +353,7 @@ function(defer_finish_batches)
                 set(_extra_arguments "")
             endif()
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
-                COMMAND ${CMAKE_COMMAND} -E env
-                    "DEFER_EXTRA_INCLUDE_DIRS=${DEFER_EXTRA_INCLUDE_DIRS}"
-                    "DEFER_TARGET_TRIPLE=${DEFER_TARGET_TRIPLE}"
-                    "$<TARGET_FILE:defer-native>" --batch "${_manifest}"
+                COMMAND "$<TARGET_FILE:defer-native>" --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                     ${_extra_arguments}
                 DEPENDS ${_sources} "${_manifest}" defer-native "${CMAKE_BINARY_DIR}/compile_commands.json"

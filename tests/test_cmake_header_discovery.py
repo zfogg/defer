@@ -12,6 +12,29 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("extension", ["m", "mm"])
+def test_discovery_tracks_included_objc_files(tmp_path: Path, extension: str) -> None:
+    cmake = shutil.which("cmake")
+    if not cmake:
+        pytest.skip("CMake is required")
+    project = tmp_path / "project"
+    project.mkdir()
+    objc = project / f"included.{extension}"
+    objc.write_text("#define OBJC_CLEANUP(action) defer(action)\n", encoding="utf-8")
+    module = (ROOT / "Defer.cmake").as_posix()
+    (project / "CMakeLists.txt").write_text(
+        'cmake_minimum_required(VERSION 3.25)\nproject(scan LANGUAGES NONE)\n'
+        f'include("{module}")\nset(_batch_stage test)\n'
+        'defer_scan_targets(selected)\nget_property(wrappers GLOBAL PROPERTY DEFER_WRAPPER_NAMES)\n'
+        'file(WRITE "${CMAKE_BINARY_DIR}/result.txt" "${wrappers}")\n',
+        encoding="utf-8",
+    )
+    build = tmp_path / "build"
+    result = subprocess.run([cmake, "-S", str(project), "-B", str(build)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "OBJC_CLEANUP" in (build / "result.txt").read_text(encoding="utf-8")
+
+
 def test_discovery_prunes_environments_and_keeps_explicit_roots(tmp_path: Path) -> None:
     cmake, ninja = shutil.which("cmake"), shutil.which("ninja")
     if not cmake or not ninja:

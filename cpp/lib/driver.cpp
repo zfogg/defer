@@ -11,12 +11,15 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ADT/StringExtras.h>
 #include <llvm/ADT/StringRef.h>
+#include <llvm/Support/Allocator.h>
+#include <llvm/Support/CommandLine.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FormatVariadic.h>
 #include <llvm/Support/JSON.h>
 #include <llvm/Support/Process.h>
 #include <llvm/Support/Program.h>
 #include <llvm/Support/SHA256.h>
+#include <llvm/Support/StringSaver.h>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -37,6 +40,7 @@ namespace {
 
 struct CompilationDatabase {
   CXCompilationDatabase value = nullptr;
+  std::mutex mutex;
   explicit CompilationDatabase(const fs::path &directory) {
     CXCompilationDatabase_Error error;
     value = clang_CompilationDatabase_fromDirectory(directory.u8string().c_str(), &error);
@@ -46,13 +50,37 @@ struct CompilationDatabase {
   ~CompilationDatabase() { clang_CompilationDatabase_dispose(value); }
 };
 
-std::string database_path_key(const fs::path &path) {
-  auto key = fs::weakly_canonical(fs::absolute(path)).generic_u8string();
+std::shared_ptr<CompilationDatabase> cached_compilation_database(const fs::path &directory) {
+  struct Entry {
+    fs::file_time_type time;
+    std::uintmax_t size;
+    std::shared_ptr<CompilationDatabase> database;
+  };
+  static std::mutex mutex;
+  static std::map<fs::path, Entry> cache;
+  std::lock_guard<std::mutex> lock(mutex);
+  const auto file = directory / "compile_commands.json";
+  const auto time = fs::last_write_time(file);
+  const auto size = fs::file_size(file);
+  const auto found = cache.find(directory);
+  if (found != cache.end() && found->second.time == time && found->second.size == size)
+    return found->second.database;
+  auto database = std::make_shared<CompilationDatabase>(directory);
+  cache.insert_or_assign(directory, Entry{time, size, database});
+  return database;
+}
+
+std::string absolute_path_key(const fs::path &path) {
+  auto key = fs::absolute(path).generic_u8string();
 #ifdef _WIN32
   std::transform(key.begin(), key.end(), key.begin(),
                  [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 #endif
   return key;
+}
+
+std::string database_path_key(const fs::path &path) {
+  return absolute_path_key(fs::weakly_canonical(fs::absolute(path)));
 }
 
 std::size_t exact_command_count(const fs::path &directory, CXCompilationDatabase database, const fs::path &file) {
@@ -65,19 +93,30 @@ std::size_t exact_command_count(const fs::path &directory, CXCompilationDatabase
   static std::map<std::string, Entry> cache;
   std::lock_guard<std::mutex> lock(mutex);
   const auto filename = directory / "compile_commands.json";
-  const auto key = database_path_key(filename);
+  const auto key = absolute_path_key(filename);
   const auto time = fs::last_write_time(filename);
   const auto size = fs::file_size(filename);
   auto found = cache.find(key);
   if (found == cache.end() || found->second.time != time || found->second.size != size) {
     Entry entry{time, size, {}};
+    std::map<std::string, fs::path> canonical_parents;
     auto commands = clang_CompilationDatabase_getAllCompileCommands(database);
     if (commands) {
       for (unsigned i = 0; i < clang_CompileCommands_getSize(commands); ++i) {
         const auto command = clang_CompileCommands_getCommand(commands, i);
         const auto workdir = fs::u8path(consume_string(clang_CompileCommand_getDirectory(command)));
         const auto source = fs::u8path(consume_string(clang_CompileCommand_getFilename(command)));
-        ++entry.counts[database_path_key(workdir / source)];
+        const auto absolute = fs::absolute(workdir / source);
+        const auto parent_key = absolute_path_key(absolute.parent_path());
+        auto parent = canonical_parents.find(parent_key);
+        if (parent == canonical_parents.end())
+          parent = canonical_parents.emplace(parent_key, fs::weakly_canonical(absolute.parent_path())).first;
+        const auto candidate = parent->second / absolute.filename();
+        std::error_code error;
+        const auto status = fs::symlink_status(candidate, error);
+        if (error && error != std::errc::no_such_file_or_directory && error != std::errc::not_a_directory)
+          throw fs::filesystem_error("cannot inspect compilation database path", candidate, error);
+        ++entry.counts[!error && fs::is_symlink(status) ? database_path_key(candidate) : absolute_path_key(candidate)];
       }
       clang_CompileCommands_dispose(commands);
     }
@@ -87,11 +126,11 @@ std::size_t exact_command_count(const fs::path &directory, CXCompilationDatabase
   return count == found->second.counts.end() ? 0 : count->second;
 }
 
-std::string compiler_resource_dir(const std::string &compiler) {
+std::string compiler_query(const std::string &compiler, const std::string &option) {
   static std::map<std::string, std::string> cached;
   static std::mutex cache_mutex;
   std::lock_guard<std::mutex> lock(cache_mutex);
-  const auto key = fs::absolute(fs::u8path(compiler)).u8string();
+  const auto key = fs::absolute(fs::u8path(compiler)).u8string() + "\n" + option;
   if (cached.count(key))
     return cached.at(key);
   auto program = llvm::sys::findProgramByName(compiler);
@@ -104,7 +143,7 @@ std::string compiler_resource_dir(const std::string &compiler) {
   if (auto error = llvm::sys::Process::SafelyCloseFileDescriptor(fd))
     throw std::runtime_error("cannot close resource directory output: " + error.message());
   std::string temp_path(temporary.str());
-  const llvm::StringRef arguments[] = {*program, "-print-resource-dir"};
+  const llvm::StringRef arguments[] = {*program, option};
   const std::optional<llvm::StringRef> redirects[] = {std::nullopt, llvm::StringRef(temp_path), std::nullopt};
   const int result = llvm::sys::ExecuteAndWait(*program, arguments, std::nullopt, redirects);
   std::string resource;
@@ -120,9 +159,59 @@ std::string compiler_resource_dir(const std::string &compiler) {
   while (!resource.empty() && (resource.back() == '\n' || resource.back() == '\r' || resource.back() == ' '))
     resource.pop_back();
   if (result != 0 || resource.empty())
-    throw std::runtime_error("cannot determine compiler resource directory: " + compiler);
+    throw std::runtime_error("compiler query failed: " + compiler + " " + option);
   cached.emplace(key, resource);
   return resource;
+}
+
+std::vector<std::string> emscripten_driver_defaults(const std::string &compiler) {
+  static std::mutex mutex;
+  static std::map<std::string, std::vector<std::string>> cached;
+  std::lock_guard<std::mutex> lock(mutex);
+  if (const auto found = cached.find(compiler); found != cached.end())
+    return found->second;
+  auto flags = compiler_query(compiler, "--cflags");
+#ifdef _WIN32
+  // Emscripten prints shell-quoted Windows paths; GNU tokenization otherwise
+  // treats their backslashes as escapes even inside single-quoted arguments.
+  std::replace(flags.begin(), flags.end(), '\\', '/');
+#endif
+  llvm::BumpPtrAllocator allocator;
+  llvm::StringSaver saver(allocator);
+  llvm::SmallVector<const char *, 16> tokens;
+  llvm::cl::TokenizeGNUCommandLine(flags, saver, tokens);
+  std::vector<std::string> result;
+  std::string sysroot;
+  for (std::size_t i = 0; i < tokens.size(); ++i) {
+    const std::string flag(tokens[i]);
+    if ((flag == "-target" || flag == "--target" || flag == "--sysroot") && i + 1 < tokens.size()) {
+      result.push_back(flag);
+      result.emplace_back(tokens[++i]);
+      if (flag == "--sysroot")
+        sysroot = result.back();
+    } else if (flag.rfind("--target=", 0) == 0 || flag.rfind("--sysroot=", 0) == 0) {
+      result.push_back(flag);
+      if (flag.rfind("--sysroot=", 0) == 0)
+        sysroot = flag.substr(10);
+    } else if (flag == "-Xclang" && i + 1 < tokens.size() &&
+               std::string_view(tokens[i + 1]).rfind("-iwithsysroot", 0) == 0) {
+      result.push_back(flag);
+      result.emplace_back(tokens[++i]);
+    }
+  }
+  if (sysroot.empty())
+    throw std::runtime_error("Emscripten did not report a sysroot: " + compiler);
+  if (!fs::exists(fs::u8path(sysroot) / "include" / "emscripten" / "emscripten.h")) {
+    const auto program = llvm::sys::findProgramByName(compiler);
+    if (!program)
+      throw std::runtime_error("cannot find compiler: " + compiler);
+    const llvm::StringRef args[] = {*program, "-E", "-x", "c", "-"};
+    const std::optional<llvm::StringRef> redirects[] = {llvm::StringRef(""), llvm::StringRef(""), std::nullopt};
+    if (llvm::sys::ExecuteAndWait(*program, args, std::nullopt, redirects) != 0)
+      throw std::runtime_error("cannot initialize Emscripten sysroot: " + compiler);
+  }
+  cached.emplace(compiler, result);
+  return result;
 }
 
 #ifdef __APPLE__
@@ -158,32 +247,37 @@ std::string default_macos_sdk() {
 
 std::vector<std::string> compile_arguments(const fs::path &database, const fs::path &generated,
                                            const fs::path &source) {
-  CompilationDatabase db(database);
-  const auto selected = exact_command_count(database, db.value, generated) ? generated : source;
-  if (exact_command_count(database, db.value, selected) != 1)
-    throw std::runtime_error("expected one compile command for " + selected.u8string());
-  CXCompileCommands commands = clang_CompilationDatabase_getCompileCommands(db.value, selected.u8string().c_str());
-  if (!commands || clang_CompileCommands_getSize(commands) != 1) {
-    if (commands)
-      clang_CompileCommands_dispose(commands);
-    throw std::runtime_error("expected one compile command for " + selected.u8string());
-  }
-  const auto command = clang_CompileCommands_getCommand(commands, 0);
-  const auto directory = consume_string(clang_CompileCommand_getDirectory(command));
+  auto db = cached_compilation_database(database);
+  fs::path selected;
+  std::string directory;
   std::vector<std::string> args;
-  for (unsigned i = 0; i < clang_CompileCommand_getNumArgs(command); ++i)
-    args.push_back(consume_string(clang_CompileCommand_getArg(command, i)));
-  clang_CompileCommands_dispose(commands);
+  {
+    std::lock_guard<std::mutex> database_lock(db->mutex);
+    selected = exact_command_count(database, db->value, generated) ? generated : source;
+    if (exact_command_count(database, db->value, selected) != 1)
+      throw std::runtime_error("expected one compile command for " + selected.u8string());
+    CXCompileCommands commands = clang_CompilationDatabase_getCompileCommands(db->value, selected.u8string().c_str());
+    if (!commands || clang_CompileCommands_getSize(commands) != 1) {
+      if (commands)
+        clang_CompileCommands_dispose(commands);
+      throw std::runtime_error("expected one compile command for " + selected.u8string());
+    }
+    const auto command = clang_CompileCommands_getCommand(commands, 0);
+    directory = consume_string(clang_CompileCommand_getDirectory(command));
+    for (unsigned i = 0; i < clang_CompileCommand_getNumArgs(command); ++i)
+      args.push_back(consume_string(clang_CompileCommand_getArg(command, i)));
+    clang_CompileCommands_dispose(commands);
+  }
   if (args.empty())
     throw std::runtime_error("empty compile command for " + generated.u8string());
   const auto compiler = args.front();
   const auto working_directory = fs::u8path(directory);
   const auto generated_overlay = fs::u8path(generated.parent_path().u8string() + ".vfs.json");
   std::vector<std::string> result = {"-working-directory", directory, "-iquote", source.parent_path().u8string()};
-  if (compiler.find("emcc") != std::string::npos || compiler.find("em++") != std::string::npos) {
-    result.insert(result.end(), {"-target", "wasm32-unknown-emscripten"});
-    const fs::path compiler_path = fs::u8path(compiler);
-    result.insert(result.end(), {"-isystem", (compiler_path.parent_path() / "cache/sysroot/include").u8string()});
+  const bool emscripten = compiler.find("emcc") != std::string::npos || compiler.find("em++") != std::string::npos;
+  if (emscripten) {
+    const auto defaults = emscripten_driver_defaults(compiler);
+    result.insert(result.end(), defaults.begin(), defaults.end());
   }
   for (std::size_t i = 1; i < args.size();) {
     const auto &value = args[i];
@@ -213,13 +307,30 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     // Emscripten's driver-only settings are present in the browser compile
     // database but are not valid libclang arguments. They belong to emcc's
     // link/driver layer, not to source parsing by the native defer host.
-    if (value.rfind("-s", 0) == 0 || value == "-msimd128" || value == "-Wno-error=pthreads-mem-growth") {
+    if (emscripten && value == "-s" && i + 1 < args.size()) {
+      i += 2;
+      continue;
+    }
+    if (emscripten &&
+        ((value.size() > 2 && value.rfind("-s", 0) == 0 && std::isupper(static_cast<unsigned char>(value[2]))) ||
+         value == "-msimd128" || value == "-Wno-error=pthreads-mem-growth")) {
       ++i;
+      continue;
+    }
+    if ((value == "-I" || value == "-isystem" || value == "-iquote" || value == "-idirafter" || value == "-include" ||
+         value == "-imacros" || value == "-isysroot" || value == "--sysroot" || value == "-target" ||
+         value == "--target" || value == "-resource-dir" || value == "-Xclang" || value == "-D" || value == "-U" ||
+         value == "-x") &&
+        i + 1 < args.size()) {
+      result.push_back(value);
+      result.push_back(args[i + 1]);
+      i += 2;
       continue;
     }
     if (value == "--" || value == "-c" || value == "/c" || value == "-MD" || value == "-MMD" || value == "-MP" ||
         (!value.empty() && value[0] != '-' &&
-         database_path_key(working_directory / fs::u8path(value)) == database_path_key(selected))) {
+         (absolute_path_key(working_directory / fs::u8path(value)) == absolute_path_key(selected) ||
+          database_path_key(working_directory / fs::u8path(value)) == database_path_key(selected)))) {
       ++i;
       continue;
     }
@@ -231,30 +342,7 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     if (compiler_path.is_relative() && compiler_path.has_parent_path())
       compiler_path = (working_directory / compiler_path).lexically_normal();
     result.push_back("-resource-dir");
-    result.push_back(compiler_resource_dir(compiler_path.u8string()));
-  }
-  if (const auto extra = llvm::sys::Process::GetEnv("DEFER_EXTRA_INCLUDE_DIRS")) {
-    const std::string &value = *extra;
-    std::size_t start = 0;
-    while (start <= value.size()) {
-      const auto end = value.find(';', start);
-      const auto directory = value.substr(start, end == std::string::npos ? std::string::npos : end - start);
-      if (!directory.empty()) {
-        result.push_back("-I");
-        result.push_back(directory);
-      }
-      if (end == std::string::npos)
-        break;
-      start = end + 1;
-    }
-  }
-  if (const auto target = llvm::sys::Process::GetEnv("DEFER_TARGET_TRIPLE")) {
-    if (!target->empty()) {
-      result.insert(result.end(), {"-target", *target});
-      // Keep Clang's builtin headers while excluding the host libc headers.
-      if (target->find("-musl") != std::string::npos)
-        result.push_back("-nostdlibinc");
-    }
+    result.push_back(compiler_query(compiler_path.u8string(), "-print-resource-dir"));
   }
   return result;
 }
@@ -272,7 +360,7 @@ void add_default_resource_dir(std::vector<std::string> &arguments) {
                    [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; }) &&
       llvm::sys::findProgramByName("clang")) {
     arguments.push_back("-resource-dir");
-    arguments.push_back(compiler_resource_dir("clang"));
+    arguments.push_back(compiler_query("clang", "-print-resource-dir"));
   }
 #ifdef __APPLE__
   const bool explicit_target = std::any_of(arguments.begin(), arguments.end(), [](const auto &arg) {

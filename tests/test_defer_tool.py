@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import platform
 import random
 import shlex
 import shutil
@@ -728,7 +729,8 @@ def test_batch_accepts_per_file_arguments_or_original_source_database(
     for index, value in ((1, 11), (2, 22)):
         source = root / f"source{index}.c"
         output = root / f"generated{index}" / f"source{index}.c"
-        source.write_text('#include "definitions.h"\n#define defer(...) do {} while (0)\n'
+        source.write_text('#if __STDC_VERSION__ != 201710L\n#error wrong C standard\n#endif\n'
+                          '#include "definitions.h"\n#define defer(...) do {} while (0)\n'
                           f'int f{index}(void) {{ int n=0; {{ defer(n=VALUE+OFFSET); }} return n; }}\n', encoding="utf-8")
         flags = ["-std=c17", f"-DVALUE={value}", "-I", str(include_dir)]
         outputs.append((output, flags))
@@ -781,7 +783,7 @@ def test_batch_rejects_invalid_per_file_arguments(
     assert not output.exists()
 
 
-def test_compilation_database_target_override_preserves_builtin_headers(
+def test_compilation_database_target_preserves_builtin_headers(
     tmp_path: Path, transform_environment: dict[str, str]
 ) -> None:
     source, output = tmp_path / "input.c", tmp_path / "output.c"
@@ -790,22 +792,52 @@ def test_compilation_database_target_override_preserves_builtin_headers(
     (include / "target_marker.h").write_text("#define TARGET_MARKER 42\n", encoding="utf-8")
     source.write_text(
         '#include <stddef.h>\n#include <target_marker.h>\n#include "defer.h"\n'
-        '#if __has_include(<gnu/libc-version.h>)\n#error host libc leaked into target\n#endif\n'
         '#if !defined(__aarch64__) || TARGET_MARKER != 42\n#error wrong target\n#endif\n'
         'void f(void) { size_t n = 0; defer((void)n); }\n', encoding="utf-8"
     )
     commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
-        CLANG, f"-I{ROOT / 'cpp' / 'include'}", "-c", str(source), "-o", str(tmp_path / "input.o")
+        CLANG, "--target=aarch64-unknown-linux-musl", f"-I{include}", f"-I{ROOT / 'cpp' / 'include'}",
+        "-c", str(source), "-o", str(tmp_path / "input.o")
     ]}]
+    env = transform_environment.copy()
     (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
-    env = {**transform_environment, "DEFER_TARGET_TRIPLE": "aarch64-unknown-linux-musl",
-           "DEFER_EXTRA_INCLUDE_DIRS": str(include)}
     result = subprocess.run(
         [*tool_command(env), "--compilation-database", str(tmp_path), str(source), str(output)],
         capture_output=True, text=True, env=env, check=False,
     )
     assert result.returncode == 0, result.stderr
     assert "__defer_active_" in output.read_text(encoding="utf-8")
+
+
+def test_compilation_database_uses_musl_headers_and_runtime(
+    tmp_path: Path, transform_environment: dict[str, str]
+) -> None:
+    musl = shutil.which("musl-gcc")
+    include = Path(os.environ.get("DEFER_TEST_MUSL_INCLUDE", "/usr/lib/musl/include"))
+    if not musl or not CLANG or not (include / "stdio.h").is_file() or platform.machine().lower() not in ("x86_64", "amd64"):
+        pytest.skip("x86-64, musl-gcc and musl headers are required")
+    source, output = tmp_path / "input.c", tmp_path / "output.c"
+    source.write_text(
+        '#include <stdio.h>\n#include "defer.h"\n#ifdef __GLIBC__\n#error incorrect libc\n#endif\n'
+        'int main(void) { defer(puts("musl cleanup")); return 0; }\n', encoding="utf-8"
+    )
+    flags = ["--target=x86_64-unknown-linux-musl", "-std=c17", f"-I{include}", f"-I{ROOT / 'cpp' / 'include'}"]
+    (tmp_path / "compile_commands.json").write_text(json.dumps([{
+        "directory": str(tmp_path), "file": str(source),
+        "arguments": [CLANG, *flags, "-c", str(source), "-o", str(tmp_path / "input.o")],
+    }]), encoding="utf-8")
+    result = subprocess.run(
+        [*tool_command(transform_environment), "--compilation-database", str(tmp_path), str(source), str(output)],
+        capture_output=True, text=True, env=transform_environment, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    result = subprocess.run([CLANG, *flags, "-fsyntax-only", str(output)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    executable = tmp_path / "program"
+    result = subprocess.run([musl, "-std=c17", f"-I{ROOT / 'cpp' / 'include'}", str(output), "-o", str(executable)],
+                            capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    assert subprocess.run([str(executable)], capture_output=True, text=True, check=True).stdout.strip() == "musl cleanup"
 
 
 def test_incremental_cache_invalidates_when_parser_target_changes(
@@ -820,15 +852,15 @@ def test_incremental_cache_invalidates_when_parser_target_changes(
     )
     manifest = tmp_path / "batch.txt"
     manifest.write_text(f"{source}\t{output}\n", encoding="utf-8")
-    commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
-        CLANG, f"-I{ROOT / 'cpp' / 'include'}", "-c", str(source), "-o", str(tmp_path / "input.o")
-    ]}]
-    (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
     command = [binary, "--batch", str(manifest), "--compilation-database", str(tmp_path),
                "--dependency-stamps", "--incremental"]
     def run(target: str) -> str:
-        result = subprocess.run(command, capture_output=True, text=True, check=False,
-                                env={**base_environment, "DEFER_TARGET_TRIPLE": target})
+        commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
+            CLANG, f"--target={target}", f"-I{ROOT / 'cpp' / 'include'}",
+            "-c", str(source), "-o", str(tmp_path / "input.o")
+        ]}]
+        (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
+        result = subprocess.run(command, capture_output=True, text=True, check=False, env=base_environment)
         assert result.returncode == 0, result.stderr
         return result.stderr
     assert "transformed 1 of 1" in run("x86_64-unknown-linux-musl")
@@ -881,6 +913,44 @@ def test_compilation_database_rejects_ambiguous_source_entry(tmp_path: Path, tra
     commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
         CLANG, f"-DVALUE={value}", "-c", str(source), "-o", str(tmp_path / f"{value}.o")
     ]} for value in (1, 2)]
+    (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
+    result = subprocess.run(
+        [*tool_command(transform_environment), "--compilation-database", str(tmp_path), str(source), str(output)],
+        capture_output=True, text=True, env=transform_environment, check=False,
+    )
+    assert result.returncode != 0
+    assert "expected one compile command" in result.stderr
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("kind", ["file", "directory", "directory_parent"])
+def test_compilation_database_rejects_symlinked_duplicate_entries(
+    tmp_path: Path, transform_environment: dict[str, str], kind: str
+) -> None:
+    directory = tmp_path / "real"
+    directory.mkdir()
+    source, output = directory / "source.c", tmp_path / "output.c"
+    source.write_text("void f(void) {}\n", encoding="utf-8")
+    try:
+        if kind == "file":
+            alias = tmp_path / "alias.c"
+            alias.symlink_to(source)
+        elif kind == "directory":
+            alias_dir = tmp_path / "alias-dir"
+            alias_dir.symlink_to(directory, target_is_directory=True)
+            alias = alias_dir / source.name
+        else:
+            nested = directory / "nested"
+            nested.mkdir()
+            alias_dir = tmp_path / "alias-dir"
+            alias_dir.symlink_to(nested, target_is_directory=True)
+            alias = alias_dir / ".." / source.name
+    except OSError:
+        pytest.skip("file symlinks are not available")
+    if alias.resolve() != source.resolve():
+        pytest.skip("this platform resolves the alias to a different file")
+    commands = [{"directory": str(tmp_path), "file": str(path), "arguments": [CLANG, "-c", str(path)]}
+                for path in (source, alias)]
     (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
     result = subprocess.run(
         [*tool_command(transform_environment), "--compilation-database", str(tmp_path), str(source), str(output)],
