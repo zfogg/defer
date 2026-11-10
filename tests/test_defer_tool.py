@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import platform
 import random
 import shlex
 import shutil
@@ -806,6 +807,37 @@ def test_compilation_database_target_preserves_builtin_headers(
     )
     assert result.returncode == 0, result.stderr
     assert "__defer_active_" in output.read_text(encoding="utf-8")
+
+
+def test_compilation_database_uses_musl_headers_and_runtime(
+    tmp_path: Path, transform_environment: dict[str, str]
+) -> None:
+    musl = shutil.which("musl-gcc")
+    include = Path(os.environ.get("DEFER_TEST_MUSL_INCLUDE", "/usr/lib/musl/include"))
+    if not musl or not CLANG or not (include / "stdio.h").is_file() or platform.machine().lower() not in ("x86_64", "amd64"):
+        pytest.skip("x86-64, musl-gcc and musl headers are required")
+    source, output = tmp_path / "input.c", tmp_path / "output.c"
+    source.write_text(
+        '#include <stdio.h>\n#include "defer.h"\n#ifdef __GLIBC__\n#error incorrect libc\n#endif\n'
+        'int main(void) { defer(puts("musl cleanup")); return 0; }\n', encoding="utf-8"
+    )
+    flags = ["--target=x86_64-unknown-linux-musl", "-std=c17", f"-I{include}", f"-I{ROOT / 'cpp' / 'include'}"]
+    (tmp_path / "compile_commands.json").write_text(json.dumps([{
+        "directory": str(tmp_path), "file": str(source),
+        "arguments": [CLANG, *flags, "-c", str(source), "-o", str(tmp_path / "input.o")],
+    }]), encoding="utf-8")
+    result = subprocess.run(
+        [*tool_command(transform_environment), "--compilation-database", str(tmp_path), str(source), str(output)],
+        capture_output=True, text=True, env=transform_environment, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    result = subprocess.run([CLANG, *flags, "-fsyntax-only", str(output)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    executable = tmp_path / "program"
+    result = subprocess.run([musl, "-std=c17", f"-I{ROOT / 'cpp' / 'include'}", str(output), "-o", str(executable)],
+                            capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    assert subprocess.run([str(executable)], capture_output=True, text=True, check=True).stdout.strip() == "musl cleanup"
 
 
 def test_incremental_cache_invalidates_when_parser_target_changes(
