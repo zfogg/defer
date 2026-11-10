@@ -64,7 +64,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/defer-release" "$GITHUB_WORKSPACE/dist"
           docker run --rm -v "$GITHUB_WORKSPACE:/defer" -v "$RUNNER_TEMP/defer-release:/work" -w /defer alpine:3.22 \
-            sh -ec 'apk add --no-cache clang clang-dev llvm llvm-dev lld cmake ninja python3 g++ libstdc++-static binutils linux-headers && python3 scripts/release.py --name "${{ matrix.name }}" --work /work --output /defer/dist --musl'
+            sh -ec 'apk add --no-cache clang clang-dev llvm llvm-dev lld cmake ninja python3 g++ binutils linux-headers && python3 scripts/release.py --name "${{ matrix.name }}" --work /work --output /defer/dist --musl'
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}

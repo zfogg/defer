@@ -43,7 +43,7 @@ def download_source(work: Path) -> Path:
     with tarfile.open(archive) as tar:
         for member in tar:
             parts = Path(member.name).parts
-            if len(parts) < 2 or parts[1] not in {"llvm", "clang", "cmake"}:
+            if len(parts) < 2 or parts[1] not in {"llvm", "clang", "cmake", "libc"}:
                 continue
             if any(part in {"test", "tests", "unittests", "examples", "docs", "benchmarks"} for part in parts[2:]):
                 continue
