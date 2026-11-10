@@ -728,7 +728,8 @@ def test_batch_accepts_per_file_arguments_or_original_source_database(
     for index, value in ((1, 11), (2, 22)):
         source = root / f"source{index}.c"
         output = root / f"generated{index}" / f"source{index}.c"
-        source.write_text('#include "definitions.h"\n#define defer(...) do {} while (0)\n'
+        source.write_text('#if __STDC_VERSION__ != 201710L\n#error wrong C standard\n#endif\n'
+                          '#include "definitions.h"\n#define defer(...) do {} while (0)\n'
                           f'int f{index}(void) {{ int n=0; {{ defer(n=VALUE+OFFSET); }} return n; }}\n', encoding="utf-8")
         flags = ["-std=c17", f"-DVALUE={value}", "-I", str(include_dir)]
         outputs.append((output, flags))
@@ -781,8 +782,9 @@ def test_batch_rejects_invalid_per_file_arguments(
     assert not output.exists()
 
 
+@pytest.mark.parametrize("from_database", [False, True])
 def test_compilation_database_target_override_preserves_builtin_headers(
-    tmp_path: Path, transform_environment: dict[str, str]
+    tmp_path: Path, transform_environment: dict[str, str], from_database: bool
 ) -> None:
     source, output = tmp_path / "input.c", tmp_path / "output.c"
     include = tmp_path / "target-headers"
@@ -797,9 +799,12 @@ def test_compilation_database_target_override_preserves_builtin_headers(
     commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
         CLANG, f"-I{ROOT / 'cpp' / 'include'}", "-c", str(source), "-o", str(tmp_path / "input.o")
     ]}]
+    env = transform_environment.copy()
+    if from_database:
+        commands[0]["arguments"][1:1] = ["--target=aarch64-unknown-linux-musl", f"-I{include}"]
+    else:
+        env.update(DEFER_TARGET_TRIPLE="aarch64-unknown-linux-musl", DEFER_EXTRA_INCLUDE_DIRS=str(include))
     (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
-    env = {**transform_environment, "DEFER_TARGET_TRIPLE": "aarch64-unknown-linux-musl",
-           "DEFER_EXTRA_INCLUDE_DIRS": str(include)}
     result = subprocess.run(
         [*tool_command(env), "--compilation-database", str(tmp_path), str(source), str(output)],
         capture_output=True, text=True, env=env, check=False,

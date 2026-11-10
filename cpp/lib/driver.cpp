@@ -180,7 +180,8 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   const auto working_directory = fs::u8path(directory);
   const auto generated_overlay = fs::u8path(generated.parent_path().u8string() + ".vfs.json");
   std::vector<std::string> result = {"-working-directory", directory, "-iquote", source.parent_path().u8string()};
-  if (compiler.find("emcc") != std::string::npos || compiler.find("em++") != std::string::npos) {
+  const bool emscripten = compiler.find("emcc") != std::string::npos || compiler.find("em++") != std::string::npos;
+  if (emscripten) {
     result.insert(result.end(), {"-target", "wasm32-unknown-emscripten"});
     const fs::path compiler_path = fs::u8path(compiler);
     result.insert(result.end(), {"-isystem", (compiler_path.parent_path() / "cache/sysroot/include").u8string()});
@@ -213,7 +214,13 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     // Emscripten's driver-only settings are present in the browser compile
     // database but are not valid libclang arguments. They belong to emcc's
     // link/driver layer, not to source parsing by the native defer host.
-    if (value.rfind("-s", 0) == 0 || value == "-msimd128" || value == "-Wno-error=pthreads-mem-growth") {
+    if (emscripten && value == "-s" && i + 1 < args.size()) {
+      i += 2;
+      continue;
+    }
+    if (emscripten && ((value.size() > 2 && value.rfind("-s", 0) == 0 &&
+                        std::isupper(static_cast<unsigned char>(value[2]))) ||
+                       value == "-msimd128" || value == "-Wno-error=pthreads-mem-growth")) {
       ++i;
       continue;
     }
@@ -232,6 +239,16 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       compiler_path = (working_directory / compiler_path).lexically_normal();
     result.push_back("-resource-dir");
     result.push_back(compiler_resource_dir(compiler_path.u8string()));
+  }
+  for (std::size_t i = 0; i < result.size(); ++i) {
+    const auto &arg = result[i];
+    const bool musl_target = ((arg == "-target" || arg == "--target") && i + 1 < result.size() &&
+                              result[i + 1].find("-musl") != std::string::npos) ||
+                             (arg.rfind("--target=", 0) == 0 && arg.find("-musl") != std::string::npos);
+    if (musl_target && std::find(result.begin(), result.end(), "-nostdlibinc") == result.end()) {
+      result.push_back("-nostdlibinc");
+      break;
+    }
   }
   if (const auto extra = llvm::sys::Process::GetEnv("DEFER_EXTRA_INCLUDE_DIRS")) {
     const std::string &value = *extra;
