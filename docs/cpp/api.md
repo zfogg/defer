@@ -1,7 +1,8 @@
 # Native API
 
-The source transformer reports unsupported control flow as an exception rather
-than emitting code whose cleanup behavior cannot be proven.
+The source transformer rejects control flow whose cleanup behavior cannot be
+proven. The C++ API throws an exception; the C ABI returns a nonzero status
+and an optional diagnostic, with buffers released by the SDK.
 
 ```{c:autodoc} defer_api.h
 ```
