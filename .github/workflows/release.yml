@@ -88,7 +88,7 @@ jobs:
       - name: Confirm every platform archive is present
         run: |
           test "$(find dist -name '*.zip' | wc -l)" -eq 8
-          sha256sum dist/*.zip > dist/SHA256SUMS.txt
+          (cd dist && sha256sum *.zip > SHA256SUMS.txt)
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
