@@ -2,8 +2,22 @@
 name = "defer-tool"
 version = "0.1.0"
 description = "Clang-based defer source transformation"
+readme = "python/README.md"
+license-files = ["LICENSE", "python/vendor/LICENSE-LLVM.txt"]
 requires-python = ">=3.10"
 dependencies = []
+
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "python", "clang" = "python/vendor/clang"}
+packages = ["clang"]
+py-modules = ["defer", "analysis", "manifest", "plan", "scan"]
+
+[tool.setuptools.data-files]
+"share/defer" = ["Defer.cmake"]
 
 [dependency-groups]
 dev = [

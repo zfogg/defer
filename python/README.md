@@ -15,17 +15,17 @@ by the platform loader:
 
 ```sh
 uv sync --frozen
-uv run --frozen python python/defer.py input.c output.c -- -std=c17 -Iinclude
+uv run --frozen python -m defer input.c output.c -- -std=c17 -Iinclude
 ```
 
 For a stream, provide a virtual filename for diagnostics and relative includes:
 
 ```sh
-uv run --frozen python python/defer.py --filename input.c -- -std=c17 -Iinclude < input.c > output.c
+uv run --frozen python -m defer --filename input.c -- -std=c17 -Iinclude < input.c > output.c
 ```
 
 Use `--batch manifest.txt` with per-file arguments or a compilation database to
-transform multiple files in one process. Run `python/defer.py --help` for the
+transform multiple files in one process. Run `uv run --frozen python -m defer --help` for the
 complete interface. The project-level README describes CMake integration and
 installation.
 

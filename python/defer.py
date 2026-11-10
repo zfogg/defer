@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import functools
 import hashlib
+import importlib.metadata
 import json
 import os
 import re
@@ -347,6 +348,16 @@ def batch_main() -> int:
 def main(protected_paths: list[Path] | None = None) -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "cmake-config":
         config = Path(__file__).resolve().parent.parent / "Defer.cmake"
+        if not config.is_file():
+            try:
+                package = importlib.metadata.distribution("defer-tool")
+                entry = next(
+                    item for item in package.files or ()
+                    if item.as_posix().endswith("share/defer/Defer.cmake")
+                )
+                config = Path(str(package.locate_file(entry)))
+            except (importlib.metadata.PackageNotFoundError, StopIteration):
+                config = Path(sys.prefix) / "share" / "defer" / "Defer.cmake"
         parser = argparse.ArgumentParser(prog="defer-tool cmake-config")
         parser.add_argument("--write-file", type=Path)
         options = parser.parse_args(sys.argv[2:])

@@ -12,10 +12,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture(params=["python", "native"])
+@pytest.fixture(params=["python", "python-module", "native"])
 def command(request: pytest.FixtureRequest) -> list[str]:
     if request.param == "python":
         return [sys.executable, str(ROOT / "python/defer.py")]
+    if request.param == "python-module":
+        return [sys.executable, "-m", "defer"]
     binary = os.environ.get("DEFER_TEST_BINARY")
     if not binary:
         pytest.skip("set DEFER_TEST_BINARY to test the native tool")
@@ -46,8 +48,22 @@ def test_direct_transform_finds_builtin_headers(command: list[str], tmp_path: Pa
     output = tmp_path / "output.c"
     source.write_text('#include <stdio.h>\n#include "defer.h"\nint main(void) { defer(puts("done")); return 0; }\n', encoding="utf-8")
     include = f"-I{ROOT / 'cpp' / 'include'}"
-    result = subprocess.run([*command, str(source), str(output), "--", "-std=c17", include], capture_output=True, text=True, check=False)
+    result = subprocess.run([*command, str(source), str(output), "--", "-std=c17", include],
+                            cwd=tmp_path, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
     executable = tmp_path / ("program.exe" if sys.platform == "win32" else "program")
     subprocess.run([compiler, str(output), include, "-o", str(executable)], capture_output=True, text=True, check=True)
     assert subprocess.check_output([executable], text=True).strip() == "done"
+
+
+def test_module_and_executable_transform_standard_input(command: list[str], tmp_path: Path) -> None:
+    source = b'#include "defer.h"\nvoid f(void) { defer((void)0); }\n'
+    result = subprocess.run(
+        [*command, "--filename", str(tmp_path / "virtual.c"), "--", "-I", str(ROOT / "cpp" / "include")],
+        cwd=tmp_path,
+        input=source,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert b"__defer_active_" in result.stdout
