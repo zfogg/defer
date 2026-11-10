@@ -790,6 +790,7 @@ def test_compilation_database_target_override_preserves_builtin_headers(
     (include / "target_marker.h").write_text("#define TARGET_MARKER 42\n", encoding="utf-8")
     source.write_text(
         '#include <stddef.h>\n#include <target_marker.h>\n#include "defer.h"\n'
+        '#if __has_include(<gnu/libc-version.h>)\n#error host libc leaked into target\n#endif\n'
         '#if !defined(__aarch64__) || TARGET_MARKER != 42\n#error wrong target\n#endif\n'
         'void f(void) { size_t n = 0; defer((void)n); }\n', encoding="utf-8"
     )
@@ -805,6 +806,34 @@ def test_compilation_database_target_override_preserves_builtin_headers(
     )
     assert result.returncode == 0, result.stderr
     assert "__defer_active_" in output.read_text(encoding="utf-8")
+
+
+def test_incremental_cache_invalidates_when_parser_target_changes(
+    tmp_path: Path, base_environment: dict[str, str]
+) -> None:
+    binary = base_environment.get("DEFER_TEST_BINARY")
+    if not binary or not CLANG:
+        pytest.skip("native defer binary and Clang are required")
+    source, output = tmp_path / "input.c", tmp_path / "generated" / "output.c"
+    source.write_text(
+        '#include "defer.h"\nvoid f(void) { defer((void)0); }\n', encoding="utf-8"
+    )
+    manifest = tmp_path / "batch.txt"
+    manifest.write_text(f"{source}\t{output}\n", encoding="utf-8")
+    commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
+        CLANG, f"-I{ROOT / 'cpp' / 'include'}", "-c", str(source), "-o", str(tmp_path / "input.o")
+    ]}]
+    (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
+    command = [binary, "--batch", str(manifest), "--compilation-database", str(tmp_path),
+               "--dependency-stamps", "--incremental"]
+    def run(target: str) -> str:
+        result = subprocess.run(command, capture_output=True, text=True, check=False,
+                                env={**base_environment, "DEFER_TARGET_TRIPLE": target})
+        assert result.returncode == 0, result.stderr
+        return result.stderr
+    assert "transformed 1 of 1" in run("x86_64-unknown-linux-musl")
+    assert "transformed 0 of 1" in run("x86_64-unknown-linux-musl")
+    assert "transformed 1 of 1" in run("aarch64-unknown-linux-musl")
 
 
 def test_compilation_database_prefers_generated_entry(tmp_path: Path, transform_environment: dict[str, str]) -> None:
