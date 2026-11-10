@@ -33,7 +33,7 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, c
     checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
     project = tmp_path / "project"
     project.mkdir()
-    for excluded in (".git", ".venv"):
+    for excluded in (".git", ".venv", "venv", "node_modules", "__pycache__"):
         directory = project / excluded
         directory.mkdir()
         (directory / "unrelated.h").write_text("static void f(void) { defer((void)0); }\n", encoding="utf-8")

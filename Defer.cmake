@@ -56,7 +56,7 @@ endfunction()
 function(defer_collect_headers out_var directory)
     get_filename_component(_directory "${directory}" ABSOLUTE)
     get_filename_component(_name "${_directory}" NAME)
-    if(_name MATCHES "^(\\.git|\\.hg|\\.svn|\\.venv|__pycache__)$")
+    if(NOT ARGN AND _name MATCHES "^(\\.git|\\.hg|\\.svn|\\.venv|venv|__pycache__|node_modules)$")
         set(${out_var} "" PARENT_SCOPE)
         return()
     endif()
@@ -65,6 +65,35 @@ function(defer_collect_headers out_var directory)
     if(_inside_build OR NOT IS_DIRECTORY "${_directory}")
         set(${out_var} "" PARENT_SCOPE)
         return()
+    endif()
+    if(UNIX)
+        find_program(_defer_find NAMES find)
+        if(_defer_find)
+            # Discover directories and headers without a CMake filesystem
+            # query for every file on a potentially remote source mount.
+            # Directory timestamps detect membership changes; header contents
+            # are separately registered as configure dependencies below.
+            set(_prune \( \( ! -path "${_directory}" \( -name .git -o -name .hg -o -name .svn
+                -o -name .venv -o -name venv -o -name __pycache__ -o -name node_modules \) \)
+                -o -path "${_build}" \) -prune -o)
+            execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune} -type d -print
+                OUTPUT_VARIABLE _directory_output RESULT_VARIABLE _directory_result ERROR_VARIABLE _directory_error
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+            execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune}
+                \( -type f -o -type l \) \( -name "*.h" -o -name "*.hpp" -o -name "*.hh"
+                -o -name "*.hxx" -o -name "*.inc" -o -name "*.def" \) -print
+                OUTPUT_VARIABLE _header_output RESULT_VARIABLE _header_result ERROR_VARIABLE _header_error
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+            if(NOT _directory_result EQUAL 0 OR NOT _header_result EQUAL 0)
+                message(FATAL_ERROR "defer header discovery failed: ${_directory_error}${_header_error}")
+            endif()
+            string(REPLACE "\n" ";" _directories "${_directory_output}")
+            string(REPLACE "\n" ";" _headers "${_header_output}")
+            set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                ${_directories})
+            set(${out_var} "${_headers}" PARENT_SCOPE)
+            return()
+        endif()
     endif()
     file(GLOB _entries CONFIGURE_DEPENDS LIST_DIRECTORIES TRUE "${_directory}/*")
     set(_headers "")
@@ -331,7 +360,7 @@ function(defer_scan_targets out_var)
     # Discover wrapper names from project headers, including transitive wrappers.
     # This stays conservative: false positives merely cause a source to be parsed.
     foreach(_directory IN LISTS DEFER_SOURCE_DIRS)
-        defer_collect_headers(_directory_headers "${DEFER_SOURCE_ROOT}/${_directory}")
+        defer_collect_headers(_directory_headers "${DEFER_SOURCE_ROOT}/${_directory}" TRUE)
         list(APPEND _defer_headers ${_directory_headers})
     endforeach()
     foreach(_extra_dir IN LISTS DEFER_WRAPPER_HEADER_DIRS)
@@ -339,7 +368,7 @@ function(defer_scan_targets out_var)
         if(NOT IS_DIRECTORY "${_extra_dir}")
             message(FATAL_ERROR "defer wrapper header directory does not exist: ${_extra_dir}")
         endif()
-        defer_collect_headers(_extra_headers "${_extra_dir}")
+        defer_collect_headers(_extra_headers "${_extra_dir}" TRUE)
         list(APPEND _defer_headers ${_extra_headers})
     endforeach()
     list(REMOVE_DUPLICATES _defer_headers)

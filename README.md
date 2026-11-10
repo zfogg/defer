@@ -163,6 +163,8 @@ defer_targets(app)
 
 Choose the ZIP for the **build host**, including for cross compilation. Set `CMAKE_EXPORT_COMPILE_COMMANDS=ON` before configuring targets. The module's `DEFER_SOURCE_DIRS` and `DEFER_WRAPPER_HEADER_DIRS` options control which project and external headers it scans. The [documentation site](https://zfogg.github.io/defer/) describes scope, restrictions, and the SDK.
 
+Header discovery skips nested virtual environments, `node_modules`, VCS metadata, and the current build directory. If a needed wrapper is inside an excluded dependency tree, list its directory explicitly in `DEFER_WRAPPER_HEADER_DIRS`.
+
 ## C++ SDK
 
 Include `api.h` and link the static or shared SDK library to transform an in-memory source buffer:
