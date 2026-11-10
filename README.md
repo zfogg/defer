@@ -37,10 +37,43 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(DEFER_NATIVE_BINARY "/path/to/defer-tool")
 include("${CMAKE_CURRENT_SOURCE_DIR}/Defer.cmake")
 add_executable(app main.c)
+target_include_directories(app PRIVATE "/path/to/defer/include")
 defer_targets(app)
 ```
 
 The module uses batch transformation and the compilation database, supports incremental rebuilds and header overlays, and requires single-config Ninja or Unix Makefiles. Include `defer.h` in source files. See `examples/hello_world_cmake` for an example.
+
+For a release archive, CMake can download the appropriate host archive and generate the module during configuration. Set `DEFER_ARCHIVE_URL` to a versioned release ZIP and `DEFER_ARCHIVE_SHA256` to its published checksum:
+
+```cmake
+set(_defer_dir "${CMAKE_BINARY_DIR}/defer-release")
+file(MAKE_DIRECTORY "${_defer_dir}")
+if(NOT EXISTS "${_defer_dir}/defer.zip")
+  file(DOWNLOAD "${DEFER_ARCHIVE_URL}" "${_defer_dir}/defer.zip"
+       EXPECTED_HASH "SHA256=${DEFER_ARCHIVE_SHA256}" TLS_VERIFY ON)
+else()
+  file(SHA256 "${_defer_dir}/defer.zip" _defer_archive_hash)
+  if(NOT _defer_archive_hash STREQUAL DEFER_ARCHIVE_SHA256)
+    message(FATAL_ERROR "Cached defer archive does not match DEFER_ARCHIVE_SHA256")
+  endif()
+endif()
+if(CMAKE_HOST_WIN32)
+  set(DEFER_NATIVE_BINARY "${_defer_dir}/bin/defer-tool.exe")
+else()
+  set(DEFER_NATIVE_BINARY "${_defer_dir}/bin/defer-tool")
+endif()
+if(NOT EXISTS "${DEFER_NATIVE_BINARY}")
+  file(ARCHIVE_EXTRACT INPUT "${_defer_dir}/defer.zip" DESTINATION "${_defer_dir}")
+endif()
+execute_process(COMMAND "${DEFER_NATIVE_BINARY}" cmake-config --write-file "${_defer_dir}/Defer.cmake"
+                COMMAND_ERROR_IS_FATAL ANY)
+include("${_defer_dir}/Defer.cmake")
+# After add_executable(app ...):
+target_include_directories(app PRIVATE "${_defer_dir}/include")
+defer_targets(app)
+```
+
+Choose the ZIP for the **build host**, including for cross compilation. Set `CMAKE_EXPORT_COMPILE_COMMANDS=ON` before configuring targets. The module's `DEFER_SOURCE_DIRS` and `DEFER_WRAPPER_HEADER_DIRS` options control which project and external headers it scans. The [documentation site](https://zfogg.github.io/defer/) describes scope, restrictions, and the SDK.
 
 ## Building and testing
 
@@ -53,4 +86,4 @@ ctest --test-dir build --output-on-failure
 cmake --install build --prefix /your/install/prefix
 ```
 
-`make build`, `make install`, `make format`, and `make format-check` provide shortcuts. The install includes the CLI, SDK libraries and headers, and the CMake module. The native tool currently requires libclang at runtime.
+`make build`, `make install`, `make format`, and `make format-check` provide shortcuts. The install includes the CLI, SDK libraries and headers, and the CMake module. A normal development build uses a shared libclang; release builds link it statically. Build the two-language documentation separately with `cmake -S docs -B build/docs` followed by `cmake --build build/docs --target docs`.

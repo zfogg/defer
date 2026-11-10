@@ -563,10 +563,11 @@ int main(int argc, char **argv) {
           shared_context += cwd;
         }
         bool next_is_path = false;
-        const auto arguments =
+        auto arguments =
             options.compilation_database.empty()
                 ? per_file_arguments[i]
                 : defer_tool::compilation_arguments(options.compilation_database, inputs[i].second, inputs[i].first);
+        defer_tool::add_default_resource_dir(arguments);
         file_arguments[i] = arguments;
         for (const auto &argument : arguments) {
           contexts[i] += std::to_string(argument.size()) + ":" + argument + "\n";

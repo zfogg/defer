@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -31,6 +32,26 @@ from analysis import (
     transform_input,
 )
 from manifest import Manifest, ManifestError
+
+
+@functools.lru_cache(maxsize=1)
+def default_resource_dir() -> str | None:
+    """Find builtin headers for direct calls using the Clang on PATH."""
+    compiler = shutil.which("clang")
+    if not compiler:
+        return None
+    result = subprocess.run([compiler, "-print-resource-dir"], capture_output=True, text=True, check=False)
+    if result.returncode or not result.stdout.strip():
+        raise TransformError(f"cannot determine resource directory for {compiler}: {result.stderr}")
+    return result.stdout.strip()
+
+
+def add_default_resource_dir(arguments: list[str]) -> list[str]:
+    """Preserve an explicitly supplied resource directory, or use Clang's."""
+    if any(argument.startswith("-resource-dir") for argument in arguments):
+        return arguments
+    resource = default_resource_dir()
+    return [*arguments, "-resource-dir", resource] if resource else arguments
 
 
 @functools.lru_cache(maxsize=8)
@@ -390,6 +411,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
                 if database.name == "compile_commands.json":
                     database = database.parent
                 clang_args = compilation_arguments(database, path, path)
+            clang_args = add_default_resource_dir(clang_args)
             objc = is_objc_source(path, clang_args)
             if objc:
                 require_objc_exceptions(clang_args)
@@ -409,6 +431,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
             if args.source or args.output or args.depfile or args.compilation_database or args.header_overlay:
                 raise TransformError("inspection accepts only explicit Clang arguments")
             source_path = Path(path).resolve()
+            clang_args = add_default_resource_dir(clang_args)
             objc = is_objc_source(source_path, clang_args)
             if objc:
                 require_objc_exceptions(clang_args)
@@ -459,6 +482,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
             clang_args = compilation_arguments(
                 args.compilation_database, args.output, args.source
             )
+        clang_args = add_default_resource_dir(clang_args)
         objc = is_objc_source(args.source, clang_args)
         if objc:
             require_objc_exceptions(clang_args)

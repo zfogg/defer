@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -35,3 +36,18 @@ def test_cmake_config_rejects_invalid_arguments(command: list[str]) -> None:
     result = subprocess.run([*command, "cmake-config", "--write-file"], capture_output=True, check=False)
     assert result.returncode != 0
     assert not result.stdout
+
+
+def test_direct_transform_finds_builtin_headers(command: list[str], tmp_path: Path) -> None:
+    compiler = shutil.which("clang")
+    if not compiler:
+        pytest.skip("Clang is required")
+    source = tmp_path / "source.c"
+    output = tmp_path / "output.c"
+    source.write_text('#include <stdio.h>\n#include "defer.h"\nint main(void) { defer(puts("done")); return 0; }\n', encoding="utf-8")
+    include = f"-I{ROOT / 'cpp' / 'include'}"
+    result = subprocess.run([*command, str(source), str(output), "--", "-std=c17", include], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    executable = tmp_path / ("program.exe" if sys.platform == "win32" else "program")
+    subprocess.run([compiler, str(output), include, "-o", str(executable)], capture_output=True, text=True, check=True)
+    assert subprocess.check_output([executable], text=True).strip() == "done"

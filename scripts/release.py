@@ -205,7 +205,7 @@ def main() -> None:
     verify_binary(binary, args.musl)
     generated = work / "Defer.cmake"
     run(binary, "cmake-config", "--write-file", generated)
-    if generated.read_bytes() != (ROOT / "Defer.cmake").read_bytes():
+    if generated.read_bytes().replace(b"\r\n", b"\n") != (ROOT / "Defer.cmake").read_bytes().replace(b"\r\n", b"\n"):
         raise RuntimeError("embedded CMake configuration differs from source")
     output = work / "hello.c"
     run(binary, ROOT / "examples/hello_world/main.c", output, "--", f"-I{stage / 'include'}")

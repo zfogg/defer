@@ -34,6 +34,8 @@ std::string read_file(const std::filesystem::path &path);
 std::vector<std::string> compilation_arguments(const std::filesystem::path &database,
                                                const std::filesystem::path &output,
                                                const std::filesystem::path &source);
+/** Add the default Clang resource directory when no explicit one is supplied. */
+void add_default_resource_dir(std::vector<std::string> &arguments);
 void write_if_changed(const std::filesystem::path &path, const std::string &contents);
 std::filesystem::path loaded_libclang_path();
 void verify_libclang(const std::filesystem::path &requested);

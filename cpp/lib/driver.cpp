@@ -218,6 +218,16 @@ std::vector<std::string> compilation_arguments(const fs::path &database, const f
                            fs::weakly_canonical(fs::absolute(source)));
 }
 
+void add_default_resource_dir(std::vector<std::string> &arguments) {
+  if (std::any_of(arguments.begin(), arguments.end(),
+                  [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; }))
+    return;
+  if (!llvm::sys::findProgramByName("clang"))
+    return;
+  arguments.push_back("-resource-dir");
+  arguments.push_back(compiler_resource_dir("clang"));
+}
+
 static bool is_cpp_source(const fs::path &source, const std::vector<std::string> &arguments) {
   for (std::size_t i = arguments.size(); i > 1; --i)
     if (arguments[i - 2] == "-x")
@@ -603,6 +613,7 @@ TransformResult transform_content(ClangIndex &index, const fs::path &source_path
   auto arguments = options.compilation_database.empty()
                        ? options.clang_arguments
                        : compile_arguments(options.compilation_database, output.empty() ? source : output, source);
+  add_default_resource_dir(arguments);
   const bool objc = is_objc_source(source, arguments);
   if (objc)
     require_objc_exceptions(arguments);
@@ -676,6 +687,7 @@ FileDependencies transform_file(ClangIndex &index, const fs::path &source_path, 
     auto arguments = options.compilation_database.empty()
                          ? options.clang_arguments
                          : compile_arguments(options.compilation_database, output, source);
+    add_default_resource_dir(arguments);
     const bool objc = is_objc_source(source, arguments);
     if (objc)
       require_objc_exceptions(arguments);
@@ -699,6 +711,7 @@ std::string inspect_file(ClangIndex &index, const fs::path &source_path, unsigne
     throw std::runtime_error("inspection requires explicit Clang arguments rather than a compilation database");
   const auto source = fs::weakly_canonical(fs::absolute(source_path));
   auto arguments = options.clang_arguments;
+  add_default_resource_dir(arguments);
   const bool objc = is_objc_source(source, arguments);
   if (objc)
     require_objc_exceptions(arguments);
