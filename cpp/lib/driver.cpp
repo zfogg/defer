@@ -264,6 +264,14 @@ std::string read_file(const fs::path &path) {
 }
 
 fs::path loaded_libclang_path() {
+#ifdef DEFER_STATIC_LIBCLANG
+  // Static libclang has no shared-library pathname. The executable contains
+  // its implementation and is a suitable identity for incremental caches.
+  auto executable = llvm::sys::fs::getMainExecutable(nullptr, reinterpret_cast<void *>(&loaded_libclang_path));
+  if (executable.empty())
+    throw std::runtime_error("cannot determine executable path for static libclang");
+  return fs::u8path(executable);
+#else
   fs::path loaded;
 #ifdef _WIN32
   HMODULE module = nullptr;
@@ -283,9 +291,14 @@ fs::path loaded_libclang_path() {
   loaded = fs::u8path(info.dli_fname);
 #endif
   return loaded;
+#endif
 }
 
 void verify_libclang(const fs::path &requested) {
+#ifdef DEFER_STATIC_LIBCLANG
+  (void)requested;
+  throw std::runtime_error("--libclang cannot select a shared library in a statically linked executable");
+#else
   if (!fs::is_regular_file(requested))
     throw std::runtime_error("libclang not found: " + requested.u8string());
   const auto loaded = loaded_libclang_path();
@@ -309,6 +322,7 @@ void verify_libclang(const fs::path &requested) {
   };
   if (digest(requested) != digest(loaded))
     throw std::runtime_error("--libclang differs from the library loaded by the native executable");
+#endif
 }
 
 void write_if_changed(const fs::path &path, const std::string &contents) {

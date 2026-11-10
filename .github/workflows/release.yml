@@ -1,0 +1,93 @@
+name: Release
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-amd64, runner: windows-2022, os: windows, arch: amd64 }
+          - { name: windows-arm64, runner: windows-11-arm, os: windows, arch: arm64 }
+          - { name: macos-amd64, runner: macos-15-intel, os: macos, arch: amd64 }
+          - { name: macos-arm64, runner: macos-15, os: macos, arch: arm64 }
+          - { name: linux-glibc-amd64, runner: ubuntu-24.04, os: linux, arch: amd64 }
+          - { name: linux-glibc-arm64, runner: ubuntu-24.04-arm, os: linux, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Linux build tools
+        if: matrix.os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y clang lld llvm ninja-build cmake binutils
+      - name: Install macOS build tools
+        if: matrix.os == 'macos'
+        run: |
+          brew install llvm ninja
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+      - name: Set up Windows compiler environment
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch == 'arm64' && 'arm64' || 'x64' }}
+      - name: Set Windows ARM compiler target
+        if: matrix.os == 'windows' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: '"DEFER_COMPILER_TARGET=aarch64-pc-windows-msvc" >> $env:GITHUB_ENV'
+      - name: Build, test, and package
+        shell: bash
+        run: python scripts/release.py --name "${{ matrix.name }}" --work "$RUNNER_TEMP/defer-release" --output "$GITHUB_WORKSPACE/dist"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*.zip
+          if-no-files-found: error
+  musl:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-musl-amd64, runner: ubuntu-24.04 }
+          - { name: linux-musl-arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, test, and package on musl
+        run: |
+          mkdir -p "$RUNNER_TEMP/defer-release" "$GITHUB_WORKSPACE/dist"
+          docker run --rm -v "$GITHUB_WORKSPACE:/defer" -v "$RUNNER_TEMP/defer-release:/work" -w /defer alpine:3.22 \
+            sh -ec 'apk add --no-cache clang clang-dev llvm llvm-dev lld cmake ninja python3 g++ libstdc++-static binutils linux-headers && python3 scripts/release.py --name "${{ matrix.name }}" --work /work --output /defer/dist --musl'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*.zip
+          if-no-files-found: error
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [native, musl]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Confirm every platform archive is present
+        run: |
+          test "$(find dist -name '*.zip' | wc -l)" -eq 8
+          sha256sum dist/*.zip > dist/SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt

@@ -59,6 +59,8 @@ def main() -> None:
     for required in ("index.html", "cpp/index.html", "cpp/api.html", "python/index.html", "python/defer.html"):
         if not (output / required).is_file():
             raise RuntimeError(f"missing generated documentation page: {required}")
+    if "defer_tool::transform" not in (output / "cpp/api.html").read_text(encoding="utf-8"):
+        raise RuntimeError("native API documentation did not include the transformer")
 
 
 if __name__ == "__main__":
