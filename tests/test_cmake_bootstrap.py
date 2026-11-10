@@ -46,6 +46,17 @@ def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend
                  [cmake, "--build", str(build)]):
         result = subprocess.run(args, capture_output=True, text=True, env=env, check=False, timeout=180)
         assert result.returncode == 0, result.stdout + result.stderr
+    if backend == "NATIVE":
+        manifest = next((build / "defer_transformed").glob("batch-*.txt"))
+        command = [binary, "--batch", str(manifest), "--compilation-database", str(build),
+                   "--incremental", "--dependency-stamps"]
+        changed_env = {**env, "EM_CACHE": str(tmp_path / "second sdk cache")}
+        result = subprocess.run(command, capture_output=True, text=True, env=changed_env, check=False, timeout=180)
+        assert result.returncode == 0, result.stderr
+        assert "transformed 1 of 1" in result.stderr
+        result = subprocess.run(command, capture_output=True, text=True, env=changed_env, check=False, timeout=180)
+        assert result.returncode == 0, result.stderr
+        assert "transformed 0 of 1" in result.stderr
 
 
 def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) -> None:
