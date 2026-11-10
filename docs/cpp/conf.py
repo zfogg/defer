@@ -22,7 +22,17 @@ compiler = shutil.which("clang")
 if compiler:
     resource_dir = subprocess.check_output([compiler, "-print-resource-dir"], text=True).strip()
     hawkmoth_clang.append(f"-resource-dir={resource_dir}")
+if sys.platform == "darwin":
+    sdk = os.environ.get("SDKROOT") or subprocess.check_output(
+        ["xcrun", "--sdk", "macosx", "--show-sdk-path"], text=True
+    ).strip()
+    hawkmoth_clang.extend(["-isysroot", sdk])
 if os.environ.get("LLVM_INCLUDE_DIR"):
     hawkmoth_clang.append(f"-I{os.environ['LLVM_INCLUDE_DIR']}")
 hawkmoth_clang_cpp = ["-std=c++17"]
+if sys.platform == "darwin":
+    libcxx = Path(compiler).resolve().parent.parent / "include/c++/v1" if compiler else Path()
+    if not compiler or not libcxx.is_dir():
+        libcxx = Path(sdk) / "usr/include/c++/v1"
+    hawkmoth_clang_cpp.append(f"-I{libcxx}")
 html_theme = "alabaster"
