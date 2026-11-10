@@ -230,7 +230,8 @@ std::string cache_context(const char *program) {
   }
 #endif
   context += defer_tool::consume_string(clang_getClangVersion()) + "\n";
-  for (const char *name : {"DEFER_EXTRA_INCLUDE_DIRS", "CPATH", "C_INCLUDE_PATH", "SDKROOT", "INCLUDE", "PATH"})
+  for (const char *name :
+       {"DEFER_EXTRA_INCLUDE_DIRS", "DEFER_TARGET_TRIPLE", "CPATH", "C_INCLUDE_PATH", "SDKROOT", "INCLUDE", "PATH"})
     context += std::string(name) + "=" + llvm::sys::Process::GetEnv(name).value_or("") + "\n";
   return context;
 }

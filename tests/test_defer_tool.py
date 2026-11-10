@@ -781,6 +781,32 @@ def test_batch_rejects_invalid_per_file_arguments(
     assert not output.exists()
 
 
+def test_compilation_database_target_override_preserves_builtin_headers(
+    tmp_path: Path, transform_environment: dict[str, str]
+) -> None:
+    source, output = tmp_path / "input.c", tmp_path / "output.c"
+    include = tmp_path / "target-headers"
+    include.mkdir()
+    (include / "target_marker.h").write_text("#define TARGET_MARKER 42\n", encoding="utf-8")
+    source.write_text(
+        '#include <stddef.h>\n#include <target_marker.h>\n#include "defer.h"\n'
+        '#if !defined(__aarch64__) || TARGET_MARKER != 42\n#error wrong target\n#endif\n'
+        'void f(void) { size_t n = 0; defer((void)n); }\n', encoding="utf-8"
+    )
+    commands = [{"directory": str(tmp_path), "file": str(source), "arguments": [
+        CLANG, f"-I{ROOT / 'cpp' / 'include'}", "-c", str(source), "-o", str(tmp_path / "input.o")
+    ]}]
+    (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
+    env = {**transform_environment, "DEFER_TARGET_TRIPLE": "aarch64-unknown-linux-musl",
+           "DEFER_EXTRA_INCLUDE_DIRS": str(include)}
+    result = subprocess.run(
+        [*tool_command(env), "--compilation-database", str(tmp_path), str(source), str(output)],
+        capture_output=True, text=True, env=env, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "__defer_active_" in output.read_text(encoding="utf-8")
+
+
 def test_compilation_database_prefers_generated_entry(tmp_path: Path, transform_environment: dict[str, str]) -> None:
     source, output = tmp_path / "input.c", tmp_path / "output.c"
     source.write_text('#if VALUE != 2\n#error wrong command\n#endif\nvoid f(void) {}\n', encoding="utf-8")

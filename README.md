@@ -125,6 +125,7 @@ The module also accepts these CMake variables:
 | `DEFER_SHARED_CACHE` | Directory for the native shared transformation cache. |
 | `DEFER_WRAPPER_HEADER_DIRS` | Additional directories containing defer wrapper macros. |
 | `DEFER_EXTRA_INCLUDE_DIRS` | Additional include directories supplied to the transformer. |
+| `DEFER_TARGET_TRIPLE` | Override the parser target for compilation-database builds. For musl targets, host system include directories are excluded while Clang builtin headers remain available; provide target libc headers through the compilation database or `DEFER_EXTRA_INCLUDE_DIRS`. |
 | `DEFER_TOOL_ROOT` | Standalone source checkout used by the Python backend. |
 | `DEFER_PYTHON_COMMAND` | Python command used by the Python backend. |
 | `DEFER_LIBCLANG_PATH` | Shared libclang library used by the Python backend; defaults to `LIBCLANG_LIBRARY_FILE` if set. |

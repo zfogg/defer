@@ -248,6 +248,14 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       start = end + 1;
     }
   }
+  if (const auto target = llvm::sys::Process::GetEnv("DEFER_TARGET_TRIPLE")) {
+    if (!target->empty()) {
+      result.insert(result.end(), {"-target", *target});
+      // Keep Clang's builtin headers while excluding the host libc headers.
+      if (target->find("-musl") != std::string::npos)
+        result.push_back("-nostdlibinc");
+    }
+  }
   return result;
 }
 
