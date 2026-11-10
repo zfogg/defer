@@ -30,6 +30,10 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path) -
     checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
     project = tmp_path / "project"
     project.mkdir()
+    for excluded in (".git", ".venv"):
+        directory = project / excluded
+        directory.mkdir()
+        (directory / "unrelated.h").write_text("static void f(void) { defer((void)0); }\n", encoding="utf-8")
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(consumer C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
         f'set(url "{archive.as_uri()}")\nset(expected "{checksum}")\n'
@@ -47,8 +51,9 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path) -
     source = project / "main.c"
     source.write_text('int main(void) { return 0; }\n', encoding="utf-8")
     build = tmp_path / "build"
-    subprocess.run([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={clang}"],
-                   capture_output=True, text=True, check=True)
+    configured = subprocess.run([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={clang}"],
+                                capture_output=True, text=True, check=True)
+    assert "C header defer detected" not in configured.stdout
     first = subprocess.run([cmake, "--build", str(build)], capture_output=True, text=True, check=True)
     assert "Transforming defer source batch" not in first.stdout
     source.write_text('#include "defer.h"\nint main(void) { int x=0; { defer(x=1); } return x!=1; }\n', encoding="utf-8")

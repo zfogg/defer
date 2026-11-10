@@ -34,9 +34,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang lld llvm ninja-build cmake binutils
       - name: Install macOS build tools
         if: matrix.os == 'macos'
-        run: |
-          brew install llvm ninja
-          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+        run: brew install ninja
       - name: Set up Windows compiler environment
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1

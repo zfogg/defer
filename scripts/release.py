@@ -60,14 +60,15 @@ def download_source(work: Path) -> Path:
 def configure_llvm(work: Path, source: Path, jobs: int) -> Path:
     build = work / "llvm-build"
     windows = sys.platform == "win32"
-    compiler = "clang-cl" if windows else "clang"
-    cxx = "clang-cl" if windows else "clang++"
+    compiler = "clang-cl" if windows else "/usr/bin/clang" if sys.platform == "darwin" else "clang"
+    cxx = "clang-cl" if windows else "/usr/bin/clang++" if sys.platform == "darwin" else "clang++"
     args = ["cmake", "-S", source / "llvm", "-B", build, "-G", "Ninja",
             "-DCMAKE_BUILD_TYPE=Release", f"-DCMAKE_C_COMPILER={compiler}", f"-DCMAKE_CXX_COMPILER={cxx}",
             "-DLLVM_ENABLE_PROJECTS=clang", "-DLLVM_TARGETS_TO_BUILD=all", "-DLIBCLANG_BUILD_STATIC=ON",
             "-DLLVM_INCLUDE_TESTS=OFF", "-DCLANG_INCLUDE_TESTS=OFF", "-DLLVM_INCLUDE_EXAMPLES=OFF",
             "-DLLVM_INCLUDE_BENCHMARKS=OFF", "-DLLVM_INCLUDE_DOCS=OFF", "-DCLANG_INCLUDE_DOCS=OFF",
             "-DLLVM_ENABLE_TERMINFO=OFF", "-DLLVM_ENABLE_LIBEDIT=OFF",
+            "-DLLVM_ENABLE_LIBPFM=OFF", "-DLLVM_ENABLE_Z3_SOLVER=OFF", "-DLLVM_ENABLE_FFI=OFF",
             "-DLLVM_ENABLE_ZLIB=OFF", "-DLLVM_ENABLE_ZSTD=OFF", "-DLLVM_ENABLE_LIBXML2=OFF",
             "-DLLVM_ENABLE_CURL=OFF"]
     if windows:
@@ -100,12 +101,19 @@ def combine_archives(stage: Path, llvm: Path) -> None:
     os.replace(combined, sdk)
 
 
-def verify_binary(binary: Path, musl: bool) -> None:
-    run(binary, "--help")
+def verify_linkage(binary: Path, musl: bool = False) -> None:
     if sys.platform == "win32":
         output = subprocess.check_output(["llvm-readobj", "--coff-imports", str(binary)], text=True)
+        if any(name in output.lower() for name in ("vcruntime", "msvcp", "msvcr")):
+            raise RuntimeError("executable depends on the shared MSVC runtime")
     elif sys.platform == "darwin":
         output = subprocess.check_output(["otool", "-L", str(binary)], text=True)
+        for line in output.splitlines()[1:]:
+            dependency = line.strip().split(" ", 1)[0]
+            if binary.suffix == ".dylib" and Path(dependency).name == binary.name:
+                continue
+            if not dependency.startswith(("/usr/lib/", "/System/Library/")):
+                raise RuntimeError(f"executable depends on a non-system library: {dependency}")
     else:
         output = subprocess.check_output(["readelf", "-d", str(binary)], text=True, stderr=subprocess.STDOUT)
         if musl:
@@ -113,7 +121,7 @@ def verify_binary(binary: Path, musl: bool) -> None:
             if "INTERP" in program_headers or "(NEEDED)" in output:
                 raise RuntimeError("musl executable is not fully static")
     if "libclang" in output.lower() or "libllvm" in output.lower():
-        raise RuntimeError("executable depends on a shared LLVM or libclang library")
+        raise RuntimeError(f"{binary} depends on a shared LLVM or libclang library")
 
 
 def verify_sdk(work: Path, stage: Path, cxx: str) -> None:
@@ -186,8 +194,8 @@ def main() -> None:
     llvm = configure_llvm(work, source, args.jobs)
     build = work / "defer-build"
     stage = work / "stage"
-    compiler = "clang-cl" if sys.platform == "win32" else "clang"
-    cxx = "clang-cl" if sys.platform == "win32" else "clang++"
+    compiler = "clang-cl" if sys.platform == "win32" else "/usr/bin/clang" if sys.platform == "darwin" else "clang"
+    cxx = "clang-cl" if sys.platform == "win32" else "/usr/bin/clang++" if sys.platform == "darwin" else "clang++"
     configure = ["cmake", "-S", ROOT, "-B", build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
         f"-DCMAKE_C_COMPILER={compiler}", f"-DCMAKE_CXX_COMPILER={cxx}", f"-DDEFER_LLVM_DEV_ROOT={llvm}",
         "-DDEFER_STATIC_LIBCLANG=ON", f"-DDEFER_FULLY_STATIC_EXECUTABLE={'ON' if args.musl else 'OFF'}"]
@@ -205,7 +213,11 @@ def main() -> None:
     combine_archives(stage, llvm)
     verify_sdk(work, stage, cxx)
     binary = stage / "bin" / ("defer-tool.exe" if sys.platform == "win32" else "defer-tool")
-    verify_binary(binary, args.musl)
+    run(binary, "--help")
+    verify_linkage(binary, args.musl)
+    shared = stage / ("bin/defer-shared.dll" if sys.platform == "win32" else
+                      "lib/libdefer-shared.dylib" if sys.platform == "darwin" else "lib/libdefer-shared.so")
+    verify_linkage(shared)
     generated = work / "Defer.cmake"
     run(binary, "cmake-config", "--write-file", generated)
     if generated.read_bytes().replace(b"\r\n", b"\n") != (ROOT / "Defer.cmake").read_bytes().replace(b"\r\n", b"\n"):
@@ -214,7 +226,8 @@ def main() -> None:
     run(binary, ROOT / "examples/hello_world/main.c", output, "--", f"-I{stage / 'include'}")
     executable = work / ("hello.exe" if sys.platform == "win32" else "hello")
     target_flag = [f"--target={os.environ['DEFER_COMPILER_TARGET']}"] if os.environ.get("DEFER_COMPILER_TARGET") else []
-    run("clang", *target_flag, output, f"-I{stage / 'include'}", "-o", executable)
+    direct_compiler = "/usr/bin/clang" if sys.platform == "darwin" else "clang"
+    run(direct_compiler, *target_flag, output, f"-I{stage / 'include'}", "-o", executable)
     if subprocess.check_output([executable], text=True).splitlines() != ["hello", "goodbye"]:
         raise RuntimeError("hello-world output was incorrect")
     example_build = work / "example-build"
