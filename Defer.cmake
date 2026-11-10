@@ -87,7 +87,7 @@ function(defer_collect_headers out_var directory is_root allow_build)
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
             execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune}
                 \( -type f -o -type l \) \( -name "*.h" -o -name "*.hpp" -o -name "*.hh"
-                -o -name "*.hxx" -o -name "*.inc" -o -name "*.def" \) -print
+                -o -name "*.hxx" -o -name "*.inc" -o -name "*.def" -o -name "*.m" -o -name "*.mm" \) -print
                 OUTPUT_VARIABLE _header_output RESULT_VARIABLE _header_result ERROR_VARIABLE _header_error
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
             if(NOT _directory_result EQUAL 0 OR NOT _header_result EQUAL 0)
@@ -113,7 +113,7 @@ function(defer_collect_headers out_var directory is_root allow_build)
         if(IS_DIRECTORY "${_entry}")
             defer_collect_headers(_nested "${_entry}" FALSE "${allow_build}")
             list(APPEND _headers ${_nested})
-        elseif(_entry MATCHES "\\.(h|hpp|hh|hxx|inc|def)$")
+        elseif(_entry MATCHES "\\.(h|hpp|hh|hxx|inc|def|m|mm)$")
             list(APPEND _headers "${_entry}")
         endif()
     endforeach()
