@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,38 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) -> None:
+    binary = os.environ.get("DEFER_TEST_BINARY")
+    cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", "clang"))
+    include = Path(os.environ.get("DEFER_TEST_MUSL_INCLUDE", "/usr/lib/musl/include"))
+    if (not all((binary, cmake, ninja, clang)) or not (include / "stdio.h").is_file()
+            or platform.machine().lower() not in ("x86_64", "amd64")):
+        pytest.skip("native defer binary, Clang, CMake, Ninja, and x86-64 musl headers are required")
+    assert binary is not None and cmake is not None and clang is not None
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "probe.c").write_text(
+        '#include <stdio.h>\n#include "defer.h"\n#ifdef __GLIBC__\n#error incorrect libc\n#endif\n'
+        'void probe(void) { defer(puts("cleanup")); }\n', encoding="utf-8"
+    )
+    (project / "CMakeLists.txt").write_text(
+        'cmake_minimum_required(VERSION 3.25)\nproject(probe C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
+        f'include("{(ROOT / "Defer.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
+        f'target_include_directories(probe PRIVATE "{(ROOT / "cpp/include").as_posix()}")\ndefer_target(probe)\n',
+        encoding="utf-8",
+    )
+    build = tmp_path / "build"
+    for args in ([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={clang}",
+                  f"-DCMAKE_C_FLAGS=--target=x86_64-unknown-linux-musl -I{include}",
+                  "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY", f"-DDEFER_NATIVE_BINARY={binary}"],
+                 [cmake, "--build", str(build)]):
+        result = subprocess.run(args, capture_output=True, text=True, check=False)
+        assert result.returncode == 0, result.stdout + result.stderr
+    result = subprocess.run([cmake, "--build", str(build)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Transforming defer source batch" not in result.stdout
 
 
 def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path) -> None:
