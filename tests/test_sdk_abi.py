@@ -89,7 +89,7 @@ def test_c_program_can_link_and_call_shared_sdk(tmp_path: Path) -> None:
     link_library = shared.with_suffix(".lib") if os.name == "nt" else shared
     source = tmp_path / "consumer.c"
     source.write_text(
-        '#include "defer_api.h"\n#include <string.h>\n'
+        '#include "api.h"\n#include <string.h>\n'
         'int main(int argc, char **argv) {\n'
         '  const char *input = "#include \\\"defer.h\\\"\\nvoid f(void) { defer((void)0); }\\n";\n'
         '  const char *flags[] = {argv[1]}; char *output = 0, *error = 0; size_t size = 0;\n'

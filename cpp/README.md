@@ -27,7 +27,7 @@ README includes download and configuration examples.
 
 ## SDK
 
-Include `defer_api.h` for the C ABI, or `api.h` for the C++ source-buffer API.
+Include `api.h` for both the C ABI and the C++ source-buffer API.
 The C ABI returns an error code and uses `defer_free_buffer` to release output
 and diagnostics in the library that allocated them. The C++ API throws on
 failure. Static and shared SDK libraries expose both interfaces.

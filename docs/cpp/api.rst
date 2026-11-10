@@ -8,12 +8,13 @@ and an optional diagnostic, with buffers released by the SDK.
 C API
 -----
 
-.. c:autodoc:: defer_api.h
+.. c:autodoc:: api.h
 
 C++ API
 -------
 
-.. cpp:autodoc:: api.h
+.. cpp:autofunction:: defer_tool::transform_source
+   :file: api.h
 
 .. cpp:autodoc:: transform.h
 

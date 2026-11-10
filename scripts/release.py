@@ -132,7 +132,7 @@ def verify_sdk(work: Path, stage: Path, cxx: str) -> None:
     source = work / "sdk-smoke"
     source.mkdir(exist_ok=True)
     (source / "main.cpp").write_text(
-        '#include "defer_api.h"\n#include <cstring>\n#include <iostream>\n#include <string>\n'
+        '#include "api.h"\n#include <cstring>\n#include <iostream>\n#include <string>\n'
         'int main(int argc, char** argv) { if (argc != 2) return 1; '
         'const char* source = "#include \\\"defer.h\\\"\\nvoid f(void) { defer((void)0); }\\n"; '
         'std::string flag = std::string("-I") + argv[1]; const char* flags[] = {flag.c_str()}; '
