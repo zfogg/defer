@@ -923,6 +923,44 @@ def test_compilation_database_rejects_ambiguous_source_entry(tmp_path: Path, tra
     assert not output.exists()
 
 
+@pytest.mark.parametrize("kind", ["file", "directory", "directory_parent"])
+def test_compilation_database_rejects_symlinked_duplicate_entries(
+    tmp_path: Path, transform_environment: dict[str, str], kind: str
+) -> None:
+    directory = tmp_path / "real"
+    directory.mkdir()
+    source, output = directory / "source.c", tmp_path / "output.c"
+    source.write_text("void f(void) {}\n", encoding="utf-8")
+    try:
+        if kind == "file":
+            alias = tmp_path / "alias.c"
+            alias.symlink_to(source)
+        elif kind == "directory":
+            alias_dir = tmp_path / "alias-dir"
+            alias_dir.symlink_to(directory, target_is_directory=True)
+            alias = alias_dir / source.name
+        else:
+            nested = directory / "nested"
+            nested.mkdir()
+            alias_dir = tmp_path / "alias-dir"
+            alias_dir.symlink_to(nested, target_is_directory=True)
+            alias = alias_dir / ".." / source.name
+    except OSError:
+        pytest.skip("file symlinks are not available")
+    if alias.resolve() != source.resolve():
+        pytest.skip("this platform resolves the alias to a different file")
+    commands = [{"directory": str(tmp_path), "file": str(path), "arguments": [CLANG, "-c", str(path)]}
+                for path in (source, alias)]
+    (tmp_path / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
+    result = subprocess.run(
+        [*tool_command(transform_environment), "--compilation-database", str(tmp_path), str(source), str(output)],
+        capture_output=True, text=True, env=transform_environment, check=False,
+    )
+    assert result.returncode != 0
+    assert "expected one compile command" in result.stderr
+    assert not output.exists()
+
+
 def test_compilation_database_removes_symlinked_input_argument(
     tmp_path: Path, transform_environment: dict[str, str]
 ) -> None:

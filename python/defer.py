@@ -12,6 +12,7 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -116,14 +117,28 @@ def default_macos_sdk() -> str | None:
 
 
 @functools.lru_cache(maxsize=8)
-def compilation_database_files(directory: Path, mtime: int, size: int) -> dict[str, int]:
+def cached_compilation_database(directory: Path, mtime: int, size: int) -> cindex.CompilationDatabase:
     del mtime, size
-    database = cindex.CompilationDatabase.fromDirectory(str(directory))
+    return cindex.CompilationDatabase.fromDirectory(str(directory))
+
+
+@functools.lru_cache(maxsize=8)
+def compilation_database_files(directory: Path, mtime: int, size: int) -> dict[str, int]:
+    database = cached_compilation_database(directory, mtime, size)
     commands = database.getAllCompileCommands()
     counts: dict[str, int] = {}
+    parents: dict[Path, Path] = {}
     if commands is not None:
         for command in commands:
-            key = os.path.normcase(str((Path(command.directory) / command.filename).resolve()))
+            path = (Path(command.directory) / command.filename).absolute()
+            if path.parent not in parents:
+                parents[path.parent] = path.parent.resolve()
+            candidate = parents[path.parent] / path.name
+            try:
+                is_symlink = stat.S_ISLNK(candidate.lstat().st_mode)
+            except (FileNotFoundError, NotADirectoryError):
+                is_symlink = False
+            key = os.path.normcase(str(candidate.resolve() if is_symlink else candidate))
             counts[key] = counts.get(key, 0) + 1
     return counts
 
@@ -131,8 +146,8 @@ def compilation_database_files(directory: Path, mtime: int, size: int) -> dict[s
 def compilation_arguments(directory: Path, generated: Path, source: Path) -> list[str]:
     """Recover the target's compile options from CMake's compilation database."""
     directory = directory.resolve()
-    database = cindex.CompilationDatabase.fromDirectory(str(directory))
     metadata = (directory / "compile_commands.json").stat()
+    database = cached_compilation_database(directory, metadata.st_mtime_ns, metadata.st_size)
     counts = compilation_database_files(directory, metadata.st_mtime_ns, metadata.st_size)
     generated, source = generated.resolve(), source.resolve()
     selected = generated if counts.get(os.path.normcase(str(generated)), 0) else source
@@ -183,9 +198,15 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
                            or value in ("-msimd128", "-Wno-error=pthreads-mem-growth")):
             index += 1
             continue
+        if value in ("-I", "-isystem", "-iquote", "-idirafter", "-include", "-imacros", "-isysroot",
+                     "--sysroot", "-target", "--target", "-resource-dir", "-Xclang", "-D", "-U", "-x") and index + 1 < len(arguments):
+            result.extend(arguments[index:index + 2])
+            index += 2
+            continue
         if (
             value in ("--", "-c", "/c", "-MD", "-MMD", "-MP")
-            or Path(value).resolve() == selected
+            or (not value.startswith("-") and
+                (Path(value).absolute() == selected or Path(value).resolve() == selected))
         ):
             index += 1
             continue

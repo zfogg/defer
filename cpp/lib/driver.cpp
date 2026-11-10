@@ -40,6 +40,7 @@ namespace {
 
 struct CompilationDatabase {
   CXCompilationDatabase value = nullptr;
+  std::mutex mutex;
   explicit CompilationDatabase(const fs::path &directory) {
     CXCompilationDatabase_Error error;
     value = clang_CompilationDatabase_fromDirectory(directory.u8string().c_str(), &error);
@@ -49,13 +50,37 @@ struct CompilationDatabase {
   ~CompilationDatabase() { clang_CompilationDatabase_dispose(value); }
 };
 
-std::string database_path_key(const fs::path &path) {
-  auto key = fs::weakly_canonical(fs::absolute(path)).generic_u8string();
+std::shared_ptr<CompilationDatabase> cached_compilation_database(const fs::path &directory) {
+  struct Entry {
+    fs::file_time_type time;
+    std::uintmax_t size;
+    std::shared_ptr<CompilationDatabase> database;
+  };
+  static std::mutex mutex;
+  static std::map<fs::path, Entry> cache;
+  std::lock_guard<std::mutex> lock(mutex);
+  const auto file = directory / "compile_commands.json";
+  const auto time = fs::last_write_time(file);
+  const auto size = fs::file_size(file);
+  const auto found = cache.find(directory);
+  if (found != cache.end() && found->second.time == time && found->second.size == size)
+    return found->second.database;
+  auto database = std::make_shared<CompilationDatabase>(directory);
+  cache.insert_or_assign(directory, Entry{time, size, database});
+  return database;
+}
+
+std::string absolute_path_key(const fs::path &path) {
+  auto key = fs::absolute(path).generic_u8string();
 #ifdef _WIN32
   std::transform(key.begin(), key.end(), key.begin(),
                  [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 #endif
   return key;
+}
+
+std::string database_path_key(const fs::path &path) {
+  return absolute_path_key(fs::weakly_canonical(fs::absolute(path)));
 }
 
 std::size_t exact_command_count(const fs::path &directory, CXCompilationDatabase database, const fs::path &file) {
@@ -68,19 +93,30 @@ std::size_t exact_command_count(const fs::path &directory, CXCompilationDatabase
   static std::map<std::string, Entry> cache;
   std::lock_guard<std::mutex> lock(mutex);
   const auto filename = directory / "compile_commands.json";
-  const auto key = database_path_key(filename);
+  const auto key = absolute_path_key(filename);
   const auto time = fs::last_write_time(filename);
   const auto size = fs::file_size(filename);
   auto found = cache.find(key);
   if (found == cache.end() || found->second.time != time || found->second.size != size) {
     Entry entry{time, size, {}};
+    std::map<std::string, fs::path> canonical_parents;
     auto commands = clang_CompilationDatabase_getAllCompileCommands(database);
     if (commands) {
       for (unsigned i = 0; i < clang_CompileCommands_getSize(commands); ++i) {
         const auto command = clang_CompileCommands_getCommand(commands, i);
         const auto workdir = fs::u8path(consume_string(clang_CompileCommand_getDirectory(command)));
         const auto source = fs::u8path(consume_string(clang_CompileCommand_getFilename(command)));
-        ++entry.counts[database_path_key(workdir / source)];
+        const auto absolute = fs::absolute(workdir / source);
+        const auto parent_key = absolute_path_key(absolute.parent_path());
+        auto parent = canonical_parents.find(parent_key);
+        if (parent == canonical_parents.end())
+          parent = canonical_parents.emplace(parent_key, fs::weakly_canonical(absolute.parent_path())).first;
+        const auto candidate = parent->second / absolute.filename();
+        std::error_code error;
+        const auto status = fs::symlink_status(candidate, error);
+        if (error && error != std::errc::no_such_file_or_directory && error != std::errc::not_a_directory)
+          throw fs::filesystem_error("cannot inspect compilation database path", candidate, error);
+        ++entry.counts[!error && fs::is_symlink(status) ? database_path_key(candidate) : absolute_path_key(candidate)];
       }
       clang_CompileCommands_dispose(commands);
     }
@@ -211,22 +247,27 @@ std::string default_macos_sdk() {
 
 std::vector<std::string> compile_arguments(const fs::path &database, const fs::path &generated,
                                            const fs::path &source) {
-  CompilationDatabase db(database);
-  const auto selected = exact_command_count(database, db.value, generated) ? generated : source;
-  if (exact_command_count(database, db.value, selected) != 1)
-    throw std::runtime_error("expected one compile command for " + selected.u8string());
-  CXCompileCommands commands = clang_CompilationDatabase_getCompileCommands(db.value, selected.u8string().c_str());
-  if (!commands || clang_CompileCommands_getSize(commands) != 1) {
-    if (commands)
-      clang_CompileCommands_dispose(commands);
-    throw std::runtime_error("expected one compile command for " + selected.u8string());
-  }
-  const auto command = clang_CompileCommands_getCommand(commands, 0);
-  const auto directory = consume_string(clang_CompileCommand_getDirectory(command));
+  auto db = cached_compilation_database(database);
+  fs::path selected;
+  std::string directory;
   std::vector<std::string> args;
-  for (unsigned i = 0; i < clang_CompileCommand_getNumArgs(command); ++i)
-    args.push_back(consume_string(clang_CompileCommand_getArg(command, i)));
-  clang_CompileCommands_dispose(commands);
+  {
+    std::lock_guard<std::mutex> database_lock(db->mutex);
+    selected = exact_command_count(database, db->value, generated) ? generated : source;
+    if (exact_command_count(database, db->value, selected) != 1)
+      throw std::runtime_error("expected one compile command for " + selected.u8string());
+    CXCompileCommands commands = clang_CompilationDatabase_getCompileCommands(db->value, selected.u8string().c_str());
+    if (!commands || clang_CompileCommands_getSize(commands) != 1) {
+      if (commands)
+        clang_CompileCommands_dispose(commands);
+      throw std::runtime_error("expected one compile command for " + selected.u8string());
+    }
+    const auto command = clang_CompileCommands_getCommand(commands, 0);
+    directory = consume_string(clang_CompileCommand_getDirectory(command));
+    for (unsigned i = 0; i < clang_CompileCommand_getNumArgs(command); ++i)
+      args.push_back(consume_string(clang_CompileCommand_getArg(command, i)));
+    clang_CompileCommands_dispose(commands);
+  }
   if (args.empty())
     throw std::runtime_error("empty compile command for " + generated.u8string());
   const auto compiler = args.front();
@@ -276,9 +317,20 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       ++i;
       continue;
     }
+    if ((value == "-I" || value == "-isystem" || value == "-iquote" || value == "-idirafter" || value == "-include" ||
+         value == "-imacros" || value == "-isysroot" || value == "--sysroot" || value == "-target" ||
+         value == "--target" || value == "-resource-dir" || value == "-Xclang" || value == "-D" || value == "-U" ||
+         value == "-x") &&
+        i + 1 < args.size()) {
+      result.push_back(value);
+      result.push_back(args[i + 1]);
+      i += 2;
+      continue;
+    }
     if (value == "--" || value == "-c" || value == "/c" || value == "-MD" || value == "-MMD" || value == "-MP" ||
         (!value.empty() && value[0] != '-' &&
-         database_path_key(working_directory / fs::u8path(value)) == database_path_key(selected))) {
+         (absolute_path_key(working_directory / fs::u8path(value)) == absolute_path_key(selected) ||
+          database_path_key(working_directory / fs::u8path(value)) == database_path_key(selected)))) {
       ++i;
       continue;
     }
