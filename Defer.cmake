@@ -6,9 +6,13 @@ set(DEFER_HEADER_OVERLAYS "AUTO" CACHE STRING "Header overlays: AUTO, ON, or OFF
 set(DEFER_NATIVE_BINARY "" CACHE FILEPATH "Host defer-tool executable")
 set(DEFER_SHARED_CACHE "" CACHE PATH "Shared transformation cache")
 set(DEFER_WRAPPER_HEADER_DIRS "" CACHE STRING "Additional wrapper header directories")
-# Use all available cores by default, while allowing constrained or virtualized
-# environments to override the worker count explicitly.
-set(DEFER_JOBS 0 CACHE STRING "Maximum concurrent defer transformations (0 uses all available cores)")
+if(NOT DEFINED DEFER_JOBS OR DEFER_JOBS LESS 1)
+  cmake_host_system_information(RESULT DEFER_JOBS QUERY NUMBER_OF_LOGICAL_CORES)
+  if(NOT DEFER_JOBS OR DEFER_JOBS LESS 1)
+    set(DEFER_JOBS 1)
+  endif()
+  set(DEFER_JOBS "${DEFER_JOBS}" CACHE STRING "Maximum concurrent defer transformations" FORCE)
+endif()
 set(_DEFER_SCAN_SCRIPT "${CMAKE_BINARY_DIR}/defer-scan.cmake")
 file(WRITE "${_DEFER_SCAN_SCRIPT}" [==[
 # Run before Ninja decides whether to regenerate its build graph. Change the
@@ -358,7 +362,7 @@ function(defer_finish_batches)
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "$<TARGET_FILE:defer-native>" --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
-                    $<$<BOOL:${DEFER_JOBS}>:--jobs> $<$<BOOL:${DEFER_JOBS}>:${DEFER_JOBS}>
+                    --jobs "${DEFER_JOBS}"
                     ${_extra_arguments}
                 DEPENDS ${_sources} "${_manifest}" defer-native "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
