@@ -230,8 +230,10 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
                 normalized.append(value[7:])
             elif value.lower() in ("/experimental:c11atomics", "/permissive-", "/fs"):
                 continue
-            elif value.lower() in ("/od", "/zi", "/w4", "/mdd", "/md", "/rtc1", "/ehsc", "/ob0", "-mdd"):
+            elif value.lower() in ("/od", "/zi", "/w4", "/mdd", "/md", "/rtc1", "/ehsc", "/ob0", "-mdd", "-zi"):
                 continue
+            elif value.lower().startswith(("/external:i", "-external:i")):
+                normalized.extend(("-I", value[value.lower().index(":i") + 2:]))
             elif value.lower().startswith(("/external:", "-external:")):
                 continue
             else:
