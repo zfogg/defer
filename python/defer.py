@@ -216,8 +216,19 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
         index += 1
     if msvc_compiler:
         normalized: list[str] = []
-        for value in result:
+        index = 0
+        while index < len(result):
+            value = result[index]
             if value == "--driver-mode=cl":
+                index += 1
+                continue
+            elif value in ("-clang:-I", "-clang:-iquote", "-clang:-isystem") and index + 1 < len(result):
+                include_flag = value[7:]
+                include_path = result[index + 1]
+                if include_path.startswith("-clang:"):
+                    include_path = include_path[7:]
+                normalized.extend((include_flag, include_path))
+                index += 2
                 continue
             elif value.startswith("/I") and len(value) > 2:
                 normalized.extend(("-I", value[2:]))
@@ -244,6 +255,7 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
                 continue
             else:
                 normalized.append(value)
+            index += 1
         result = normalized
     # libclang can parse MSVC command lines directly, but cl.exe does not
     # implement Clang's -print-resource-dir probe.  MSVC supplies its headers
