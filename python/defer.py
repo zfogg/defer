@@ -164,6 +164,7 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
     os.chdir(command.directory)
     result = ["-iquote", str(source.resolve().parent)]
     emscripten = "emcc" in compiler or "em++" in compiler
+    msvc_compiler = Path(compiler).name.lower() in ("cl.exe", "cl")
     if emscripten:
         result.extend(emscripten_driver_defaults(compiler))
     index = 0
@@ -212,7 +213,34 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             continue
         result.append(value)
         index += 1
-    if not any(value.startswith("-resource-dir") for value in result):
+    if msvc_compiler:
+        normalized: list[str] = []
+        for value in result:
+            if value == "--driver-mode=cl":
+                continue
+            elif value.startswith("/I") and len(value) > 2:
+                normalized.extend(("-I", value[2:]))
+            elif value.startswith("/D") and len(value) > 2:
+                normalized.append("-D" + value[2:])
+            elif value.startswith("/FI") and len(value) > 3:
+                normalized.extend(("-include", value[3:]))
+            elif value.startswith("-std:"):
+                normalized.append("-std=" + value[5:])
+            elif value.startswith("-clang:"):
+                normalized.append(value[7:])
+            elif value.lower() in ("/experimental:c11atomics", "/permissive-", "/fs"):
+                continue
+            elif value.lower() in ("/od", "/zi", "/w4", "/mdd", "/md", "/rtc1", "/ehsc", "/ob0", "-mdd"):
+                continue
+            elif value.lower().startswith(("/external:", "-external:")):
+                continue
+            else:
+                normalized.append(value)
+        result = normalized
+    # libclang can parse MSVC command lines directly, but cl.exe does not
+    # implement Clang's -print-resource-dir probe.  MSVC supplies its headers
+    # through the /I entries already present in compile_commands.json.
+    if not msvc_compiler and not any(value.startswith("-resource-dir") for value in result):
         process = subprocess.run(
             [compiler, "-print-resource-dir"],
             capture_output=True,
