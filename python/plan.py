@@ -58,7 +58,7 @@ def main() -> int:
     OUTPUT {outputs} {stamps} {overlays}
     COMMAND ${{DEFER_PYTHON_COMMAND}} "${{DEFER_TOOL_ROOT}}/python/defer.py"
         --batch {cmake_literal(manifest.as_posix())} --libclang "${{DEFER_LIBCLANG_PATH}}"
-        --compilation-database "${{CMAKE_BINARY_DIR}}" --depfile {cmake_literal(depfile.as_posix())} --dependency-stamps {overlay_argument}
+        --compilation-database "${{CMAKE_BINARY_DIR}}" --depfile {cmake_literal(depfile.as_posix())} --dependency-stamps --jobs "${{DEFER_JOBS}}" {overlay_argument}
     DEPENDS {sources} {cmake_literal(manifest.as_posix())}
         "${{DEFER_TOOL_ROOT}}/python/defer.py"
         "${{DEFER_TOOL_ROOT}}/python/analysis.py"

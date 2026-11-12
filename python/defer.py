@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import functools
 import hashlib
 import importlib.metadata
@@ -428,6 +429,7 @@ def batch_main() -> int:
     parser.add_argument("--depfile", type=Path)
     parser.add_argument("--dependency-stamps", action="store_true")
     parser.add_argument("--header-overlays", action="store_true")
+    parser.add_argument("--jobs", type=int, default=1, help="maximum concurrent transformations")
     args = parser.parse_args()
     if args.libclang:
         cindex.Config.set_library_file(str(args.libclang.resolve()))
@@ -462,24 +464,53 @@ def batch_main() -> int:
         for index, overlay in enumerate(overlay_paths):
             if any(paths_alias(overlay, path) for path in [*protected, *overlay_paths[:index]]):
                 raise TransformError("header overlay must not overwrite a batch input or output")
-        for index, record in enumerate(records):
+        def transform_one(index_record: tuple[int, ManifestRecord]) -> tuple[int, int, str]:
+            index, record = index_record
             source, output = str(record.source), str(record.output)
             part = Path(str(Path(output).parent) + ".depfile")
-            sys.argv = [
-                original_argv[0],
+            command = [
+                sys.executable,
+                str(Path(original_argv[0]).resolve()),
+                *(["--libclang", str(args.libclang.resolve())] if args.libclang else []),
                 *(["--compilation-database", str(database)] if database else []),
                 *(["--depfile", str(part)] if depfile else []),
-                *(["--header-overlay", str(overlay_paths[index])] if args.header_overlays else []),
                 *(["--dependency-stamp", str(Path(output).parent) + ".deps"] if args.dependency_stamps else []),
                 source,
                 output,
                 *(["--", *record.arguments] if not database else []),
             ]
-            os.chdir(original_cwd)
-            current_protected = [*protected, *overlay_paths[:index], *overlay_paths[index + 1 :]] if args.header_overlays else None
-            if main(current_protected) != 0:
+            result = subprocess.run(command, cwd=original_cwd, capture_output=True, text=True, check=False)
+            return index, result.returncode, result.stderr
+
+        indexed_records = list(enumerate(records))
+        if args.jobs > 1 and not args.header_overlays and len(indexed_records) > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
+                results = list(executor.map(transform_one, indexed_records))
+        else:
+            results = []
+            for index, record in indexed_records:
+                source, output = str(record.source), str(record.output)
+                part = Path(str(Path(output).parent) + ".depfile")
+                sys.argv = [
+                    original_argv[0],
+                    *(["--compilation-database", str(database)] if database else []),
+                    *(["--depfile", str(part)] if depfile else []),
+                    *(["--dependency-stamp", str(Path(output).parent) + ".deps"] if args.dependency_stamps else []),
+                    source,
+                    output,
+                    *(["--", *record.arguments] if not database else []),
+                ]
+                os.chdir(original_cwd)
+                current_protected = [*protected, *overlay_paths[:index], *overlay_paths[index + 1 :]] if args.header_overlays else None
+                results.append((index, main(current_protected), ""))
+
+        for index, result, error in sorted(results):
+            if result != 0:
+                if error:
+                    print(error, file=sys.stderr, end="")
                 return 1
             if depfile:
+                part = Path(str(Path(records[index].output).parent) + ".depfile")
                 target, inputs = part.read_text(encoding="utf-8").split(": ", 1)
                 if not primary:
                     primary = target
