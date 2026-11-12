@@ -225,7 +225,12 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             elif value.startswith("/FI") and len(value) > 3:
                 normalized.extend(("-include", value[3:]))
             elif value.startswith("-std:"):
-                normalized.append("-std=" + value[5:])
+                standard = value[5:]
+                # MSVC emits /std:clatest for C as well as C++. libclang
+                # accepts the C dialect spelling, not MSVC's driver alias.
+                if standard.lower() == "clatest":
+                    standard = "c2x"
+                normalized.append("-std=" + standard)
             elif value.startswith("-clang:"):
                 normalized.append(value[7:])
             elif value.lower() in ("/experimental:c11atomics", "/permissive-", "/fs"):
