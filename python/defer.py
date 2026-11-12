@@ -177,10 +177,10 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
         ):
             index += 4
             continue
-        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd"):
+        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd", "/Yu", "/Fp"):
             index += 2
             continue
-        if value.startswith(("/Fo", "/Fd")):
+        if value.startswith(("/Fo", "/Fd", "/Yu", "/Fp")):
             index += 1
             continue
         if (value == "-ivfsoverlay" and index + 1 < len(arguments)
