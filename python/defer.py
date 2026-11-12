@@ -255,9 +255,25 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             check=False,
         )
         if process.returncode:
-            raise TransformError(
-                f"cannot determine resource directory for {compiler}: {process.stderr}"
+            # GCC does not implement Clang's resource-dir query. libclang
+            # still needs Clang's builtin headers, so use the host Clang
+            # installation for that parser-only detail while preserving the
+            # selected compiler's actual include and define arguments.
+            clang = shutil.which("clang")
+            if not clang:
+                raise TransformError(
+                    f"cannot determine resource directory for {compiler}: {process.stderr}"
+                )
+            process = subprocess.run(
+                [clang, "-print-resource-dir"],
+                capture_output=True,
+                text=True,
+                check=False,
             )
+            if process.returncode:
+                raise TransformError(
+                    f"cannot determine resource directory for {compiler} or {clang}: {process.stderr}"
+                )
         result.extend(["-resource-dir", process.stdout.strip()])
     return result
 
