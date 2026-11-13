@@ -26,6 +26,11 @@ foreach(_kind STATIC SHARED)
 endforeach()
 add_executable(defer-tool cpp/src/main.cpp)
 target_compile_features(defer-tool PRIVATE cxx_std_17)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  # GCC 16 makes std::filesystem::path::u8string() return char8_t strings;
+  # defer's UTF-8 path maps intentionally use std::string.
+  target_compile_options(defer-tool PRIVATE -fno-char8_t)
+endif()
 target_include_directories(defer-tool PRIVATE cpp/include "${CMAKE_CURRENT_BINARY_DIR}/generated")
 defer_configure_llvm_host_tool(defer-tool)
 target_link_libraries(defer-tool PRIVATE defer-static Threads::Threads)
