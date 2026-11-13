@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import functools
 import hashlib
 import importlib.metadata
@@ -164,6 +165,7 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
     os.chdir(command.directory)
     result = ["-iquote", str(source.resolve().parent)]
     emscripten = "emcc" in compiler or "em++" in compiler
+    msvc_compiler = Path(compiler).name.lower() in ("cl.exe", "cl")
     if emscripten:
         result.extend(emscripten_driver_defaults(compiler))
     index = 0
@@ -176,10 +178,10 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
         ):
             index += 4
             continue
-        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd"):
+        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd", "/Yu", "/Fp"):
             index += 2
             continue
-        if value.startswith(("/Fo", "/Fd")):
+        if value.startswith(("/Fo", "/Fd", "/Yu", "/Fp")):
             index += 1
             continue
         if (value == "-ivfsoverlay" and index + 1 < len(arguments)
@@ -212,7 +214,56 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             continue
         result.append(value)
         index += 1
-    if not any(value.startswith("-resource-dir") for value in result):
+    if msvc_compiler:
+        normalized: list[str] = []
+        index = 0
+        while index < len(result):
+            value = result[index]
+            if value == "--driver-mode=cl":
+                index += 1
+                continue
+            elif value in ("-clang:-I", "-clang:-iquote", "-clang:-isystem") and index + 1 < len(result):
+                include_flag = value[7:]
+                include_path = result[index + 1]
+                if include_path.startswith("-clang:"):
+                    include_path = include_path[7:]
+                normalized.extend((include_flag, include_path))
+                index += 2
+                continue
+            elif value.startswith("/I") and len(value) > 2:
+                normalized.extend(("-I", value[2:]))
+            elif value.startswith("/D") and len(value) > 2:
+                normalized.append("-D" + value[2:])
+            elif value.startswith("/FI") and len(value) > 3:
+                normalized.extend(("-include", value[3:]))
+            elif value.startswith("-std:"):
+                standard = value[5:]
+                # MSVC emits /std:clatest for C as well as C++. libclang
+                # accepts the C dialect spelling, not MSVC's driver alias.
+                if standard.lower() == "clatest":
+                    standard = "c2x"
+                normalized.append("-std=" + standard)
+            elif value.startswith("-clang:"):
+                normalized.append(value[7:])
+            elif value.lower() in ("/experimental:c11atomics", "/permissive-", "/fs"):
+                index += 1
+                continue
+            elif value.lower() in ("/od", "/zi", "/w4", "/mdd", "/md", "/rtc1", "/ehsc", "/ob0", "-mdd", "-zi"):
+                index += 1
+                continue
+            elif value.lower().startswith(("/external:i", "-external:i")):
+                normalized.extend(("-I", value[value.lower().index(":i") + 2:]))
+            elif value.lower().startswith(("/external:", "-external:")):
+                index += 1
+                continue
+            else:
+                normalized.append(value)
+            index += 1
+        result = normalized
+    # libclang can parse MSVC command lines directly, but cl.exe does not
+    # implement Clang's -print-resource-dir probe.  MSVC supplies its headers
+    # through the /I entries already present in compile_commands.json.
+    if not msvc_compiler and not any(value.startswith("-resource-dir") for value in result):
         process = subprocess.run(
             [compiler, "-print-resource-dir"],
             capture_output=True,
@@ -220,9 +271,25 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             check=False,
         )
         if process.returncode:
-            raise TransformError(
-                f"cannot determine resource directory for {compiler}: {process.stderr}"
+            # GCC does not implement Clang's resource-dir query. libclang
+            # still needs Clang's builtin headers, so use the host Clang
+            # installation for that parser-only detail while preserving the
+            # selected compiler's actual include and define arguments.
+            clang = shutil.which("clang")
+            if not clang:
+                raise TransformError(
+                    f"cannot determine resource directory for {compiler}: {process.stderr}"
+                )
+            process = subprocess.run(
+                [clang, "-print-resource-dir"],
+                capture_output=True,
+                text=True,
+                check=False,
             )
+            if process.returncode:
+                raise TransformError(
+                    f"cannot determine resource directory for {compiler} or {clang}: {process.stderr}"
+                )
         result.extend(["-resource-dir", process.stdout.strip()])
     return result
 
@@ -377,6 +444,7 @@ def batch_main() -> int:
     parser.add_argument("--depfile", type=Path)
     parser.add_argument("--dependency-stamps", action="store_true")
     parser.add_argument("--header-overlays", action="store_true")
+    parser.add_argument("--jobs", type=int, default=1, help="maximum concurrent transformations")
     args = parser.parse_args()
     if args.libclang:
         cindex.Config.set_library_file(str(args.libclang.resolve()))
@@ -411,24 +479,53 @@ def batch_main() -> int:
         for index, overlay in enumerate(overlay_paths):
             if any(paths_alias(overlay, path) for path in [*protected, *overlay_paths[:index]]):
                 raise TransformError("header overlay must not overwrite a batch input or output")
-        for index, record in enumerate(records):
+        def transform_one(index_record: tuple[int, ManifestRecord]) -> tuple[int, int, str]:
+            index, record = index_record
             source, output = str(record.source), str(record.output)
             part = Path(str(Path(output).parent) + ".depfile")
-            sys.argv = [
-                original_argv[0],
+            command = [
+                sys.executable,
+                str(Path(original_argv[0]).resolve()),
+                *(["--libclang", str(args.libclang.resolve())] if args.libclang else []),
                 *(["--compilation-database", str(database)] if database else []),
                 *(["--depfile", str(part)] if depfile else []),
-                *(["--header-overlay", str(overlay_paths[index])] if args.header_overlays else []),
                 *(["--dependency-stamp", str(Path(output).parent) + ".deps"] if args.dependency_stamps else []),
                 source,
                 output,
                 *(["--", *record.arguments] if not database else []),
             ]
-            os.chdir(original_cwd)
-            current_protected = [*protected, *overlay_paths[:index], *overlay_paths[index + 1 :]] if args.header_overlays else None
-            if main(current_protected) != 0:
+            result = subprocess.run(command, cwd=original_cwd, capture_output=True, text=True, check=False)
+            return index, result.returncode, result.stderr
+
+        indexed_records = list(enumerate(records))
+        if args.jobs > 1 and not args.header_overlays and len(indexed_records) > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
+                results = list(executor.map(transform_one, indexed_records))
+        else:
+            results = []
+            for index, record in indexed_records:
+                source, output = str(record.source), str(record.output)
+                part = Path(str(Path(output).parent) + ".depfile")
+                sys.argv = [
+                    original_argv[0],
+                    *(["--compilation-database", str(database)] if database else []),
+                    *(["--depfile", str(part)] if depfile else []),
+                    *(["--dependency-stamp", str(Path(output).parent) + ".deps"] if args.dependency_stamps else []),
+                    source,
+                    output,
+                    *(["--", *record.arguments] if not database else []),
+                ]
+                os.chdir(original_cwd)
+                current_protected = [*protected, *overlay_paths[:index], *overlay_paths[index + 1 :]] if args.header_overlays else None
+                results.append((index, main(current_protected), ""))
+
+        for index, result, error in sorted(results):
+            if result != 0:
+                if error:
+                    print(error, file=sys.stderr, end="")
                 return 1
             if depfile:
+                part = Path(str(Path(records[index].output).parent) + ".depfile")
                 target, inputs = part.read_text(encoding="utf-8").split(": ", 1)
                 if not primary:
                     primary = target
