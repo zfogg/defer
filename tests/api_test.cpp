@@ -23,12 +23,12 @@ int main() {
   } catch (const std::invalid_argument &) {
   }
   try {
-    (void)defer_tool::transform_source("api.c", "#include \"defer.h\"\nvoid f(void) { defer(return); }\n",
+    (void)defer_tool::transform_source("api.c", "#include \"recast/defer.h\"\nvoid f(void) { DEFER(return); }\n",
                                        {"-I" DEFER_TEST_INCLUDE});
     CHECK(false);
   } catch (const std::runtime_error &) {
   }
-  const char *input = "#include \"defer.h\"\nvoid f(void) { defer((void)0); }\n";
+  const char *input = "#include \"recast/defer.h\"\nvoid f(void) { DEFER((void)0); }\n";
   const char *flags[] = {"-I" DEFER_TEST_INCLUDE};
   char *output = nullptr;
   char *error = nullptr;
