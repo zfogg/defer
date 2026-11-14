@@ -648,7 +648,7 @@ def test_cmake_shared_cache_across_build_directories(tmp_path: Path, compiler_en
         'extern "C" int cpp_test() { int value = 0; { defer(value = 1); } return value == 1; }\n',
         encoding="utf-8",
     )
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_cache C CXX)\n'
         'set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
@@ -1683,7 +1683,7 @@ def test_cmake_experimental_header_overlays_are_incremental(
     )
     other = src / "other.c"
     other.write_text('int other(void) { return 42; }\n', encoding="utf-8")
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_header C CXX)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
         f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\ndefer_targets(defer-probe)\n', encoding="utf-8"
@@ -1762,7 +1762,7 @@ def test_cmake_header_detection_ignores_non_code(tmp_path: Path, contents: str, 
     header = tmp_path / "header.h"
     header.write_text(contents, encoding="utf-8")
     script = tmp_path / "scan.cmake"
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     script.write_text(
         f'include("{module}")\nfile(READ "{header.as_posix()}" text)\n'
         'string(REGEX REPLACE "\\\\\\\\\\n" "" text "${text}")\n'
@@ -2040,7 +2040,7 @@ def test_cmake_objc_incremental(tmp_path: Path, compiler_environment: dict[str, 
                           'int main(void) { return f() != 1 || v != 8; }\n', encoding="utf-8")
     else:
         source.write_text('int main(void) { return 0; }\n', encoding="utf-8")
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_objc C OBJC CXX)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
         f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\ndefer_targets(defer-probe)\n', encoding="utf-8"
@@ -2962,7 +2962,7 @@ def test_cmake_discovers_defer_and_tracks_headers(
         )
     (project / "ready.in").write_text("#define READY 1\n", encoding="utf-8")
     include_dir = (ROOT / "cpp" / "include").as_posix()
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     (project / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.30)\n"
         "project(defer_test C CXX)\n"
