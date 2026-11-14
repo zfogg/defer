@@ -102,6 +102,15 @@ inline bool may_contain_defer(std::string_view source) {
     if (pos < source.size() && source[pos] == '(')
       return true;
   }
+  search = 0;
+  while ((search = source.find("defer", search)) != source.npos) {
+    const auto start = search++;
+    if (start && is_identifier_byte(static_cast<unsigned char>(source[start - 1])))
+      continue;
+    if (is_keyword_at(source, start, "defer") || is_keyword_at(source, start, "defer_named") ||
+        is_keyword_at(source, start, "defer_cancel"))
+      return true;
+  }
   return false;
 }
 
