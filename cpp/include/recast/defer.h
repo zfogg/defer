@@ -26,16 +26,16 @@ template <typename F> guard<F> make_guard(F action) { return guard<F>(static_cas
 } // extern "C++"
 #define RECAST_JOIN_IMPL(a, b) a##b
 #define RECAST_JOIN(a, b) RECAST_JOIN_IMPL(a, b)
-#define defer(...) auto RECAST_JOIN(__defer_guard_, __COUNTER__) = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
-#define defer_named(name, ...) auto name = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
-#define defer_cancel(name) (name).cancel()
+#define DEFER(...) auto RECAST_JOIN(__defer_guard_, __COUNTER__) = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
+#define DEFER_NAMED(name, ...) auto name = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
+#define DEFER_CANCEL(name) (name).cancel()
 #elif defined(RECAST_PARSING) || defined(DEFER_PARSING)
 void __recast_defer_marker(void);
-#define defer(...) do { __recast_defer_marker(); } while (0)
-#define defer_named(name, ...) do { __recast_defer_marker(); } while (0)
-#define defer_cancel(name) do { __recast_defer_marker(); } while (0)
+#define DEFER(...) do { __recast_defer_marker(); } while (0)
+#define DEFER_NAMED(name, ...) do { __recast_defer_marker(); } while (0)
+#define DEFER_CANCEL(name) do { __recast_defer_marker(); } while (0)
 #else
-#define defer(...) _Static_assert(0, "defer() requires the source transformation")
-#define defer_named(name, ...) _Static_assert(0, "defer_named() requires the source transformation")
-#define defer_cancel(name) _Static_assert(0, "defer_cancel() requires the source transformation")
+#define DEFER(...) _Static_assert(0, "DEFER() requires the source transformation")
+#define DEFER_NAMED(name, ...) _Static_assert(0, "DEFER_NAMED() requires the source transformation")
+#define DEFER_CANCEL(name) _Static_assert(0, "DEFER_CANCEL() requires the source transformation")
 #endif

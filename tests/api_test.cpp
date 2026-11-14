@@ -15,7 +15,7 @@
 
 int main() {
   const auto generated = defer_tool::transform_source(
-      "api.c", "#include \"recast/defer.h\"\nvoid f(void) { defer((void)0); }\n", {"-I" DEFER_TEST_INCLUDE});
+      "api.c", "#include \"recast/defer.h\"\nvoid f(void) { DEFER((void)0); }\n", {"-I" DEFER_TEST_INCLUDE});
   CHECK(generated.find("__defer_active_") != std::string::npos);
   try {
     (void)defer_tool::transform_source("", "void f(void) {}\n");

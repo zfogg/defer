@@ -22,7 +22,7 @@ std::string expand_defer_wrappers(CXTranslationUnit unit, const std::string &pat
   for (auto cursor : root)
     if (clang_getCursorKind(cursor) == CXCursor_MacroDefinition)
       definitions[spelling(cursor)].push_back(cursor);
-  const std::set<std::string> markers = {"defer", "defer_named", "defer_cancel"};
+  const std::set<std::string> markers = {"DEFER", "DEFER_NAMED", "DEFER_CANCEL"};
   std::map<std::string, bool> memo;
   std::set<std::string> visiting;
   // Cycles are not memoized as negative results: a different path through the
