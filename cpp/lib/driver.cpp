@@ -767,6 +767,7 @@ TransformResult transform_content(ClangIndex &index, const fs::path &source_path
   if (objc)
     require_objc_exceptions(arguments);
   arguments.push_back("-DDEFER_PARSING=1");
+  arguments.push_back("-DRECAST_PARSING=1");
   std::vector<const char *> raw;
   for (const auto &arg : arguments)
     raw.push_back(arg.c_str());
@@ -843,6 +844,7 @@ FileDependencies transform_file(ClangIndex &index, const fs::path &source_path, 
     if (is_cpp_source(source, arguments))
       throw std::runtime_error("C++ uses native scope guards and does not require a header overlay");
     arguments.push_back("-DDEFER_PARSING=1");
+    arguments.push_back("-DRECAST_PARSING=1");
     std::vector<const char *> raw;
     for (const auto &arg : arguments)
       raw.push_back(arg.c_str());
@@ -867,6 +869,7 @@ std::string inspect_file(ClangIndex &index, const fs::path &source_path, unsigne
   if (is_cpp_source(source, arguments))
     throw std::runtime_error("C++ defer inspection is not supported; C++ uses native scope guards");
   arguments.push_back("-DDEFER_PARSING=1");
+  arguments.push_back("-DRECAST_PARSING=1");
   std::vector<const char *> raw;
   for (const auto &arg : arguments)
     raw.push_back(arg.c_str());

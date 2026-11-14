@@ -149,6 +149,7 @@ bool restore_shared(const std::filesystem::path &root, const std::string &key, c
       return false;
     auto parse_arguments = arguments;
     parse_arguments.push_back("-DDEFER_PARSING=1");
+    parse_arguments.push_back("-DRECAST_PARSING=1");
     std::vector<const char *> raw;
     for (const auto &argument : parse_arguments)
       raw.push_back(argument.c_str());
