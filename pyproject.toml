@@ -1,7 +1,7 @@
 [project]
-name = "defer-tool"
+name = "recast"
 version = "0.1.0"
-description = "Clang-based defer source transformation"
+description = "Clang-based C source transformation pipeline"
 readme = "python/README.md"
 license-files = ["LICENSE", "python/vendor/LICENSE-LLVM.txt"]
 requires-python = ">=3.10"

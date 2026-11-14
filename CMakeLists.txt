@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(defer VERSION 0.1.0 LANGUAGES CXX)
+project(recast VERSION 0.1.0 LANGUAGES CXX)
 option(DEFER_STATIC_LIBCLANG "Link libclang and LLVM statically" OFF)
 option(DEFER_FULLY_STATIC_EXECUTABLE "Link the executable without shared libraries (musl Linux)" OFF)
 include(GNUInstallDirs)
