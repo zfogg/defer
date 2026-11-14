@@ -70,6 +70,10 @@ llvm::cl::opt<std::string> libclang("libclang", llvm::cl::desc("Path to the libc
 llvm::cl::opt<std::string> explain_location("explain", llvm::cl::desc("Explain cleanup at source:line"));
 llvm::cl::opt<std::string> show_location("show-transformed",
                                          llvm::cl::desc("Show the transformed function at source:line"));
+llvm::cl::opt<std::string> transforms(
+    "transforms",
+    llvm::cl::desc("Comma-separated transformation passes (defer; closures is not implemented yet)"),
+    llvm::cl::init("defer"));
 
 using FileMetadata = std::pair<long long, std::uintmax_t>;
 
@@ -300,6 +304,22 @@ int main(int argc, char **argv) {
       "defer source transformer\n"
       "With redirected stdin and no input/output paths, transform one source to stdout.\n");
   try {
+    if (transforms.empty())
+      throw std::runtime_error("--transforms requires at least one transformation pass");
+    std::set<std::string> enabled_transforms;
+    std::stringstream transform_list(transforms.getValue());
+    std::string transform_name;
+    while (std::getline(transform_list, transform_name, ',')) {
+      if (transform_name.empty())
+        throw std::runtime_error("--transforms contains an empty transformation name");
+      if (transform_name != "defer" && transform_name != "closures")
+        throw std::runtime_error("unknown transformation pass: " + transform_name);
+      enabled_transforms.insert(transform_name);
+    }
+    if (!enabled_transforms.count("defer"))
+      throw std::runtime_error("the defer transformation is currently required");
+    if (enabled_transforms.count("closures"))
+      throw std::runtime_error("the closures transformation is not implemented yet");
     const bool dash_stream = sources.size() >= 2 && sources[0] == "-" && sources[1] == "-";
     unsigned separator = static_cast<unsigned>(argc);
     for (int i = 1; i < argc; ++i)
