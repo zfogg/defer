@@ -164,7 +164,7 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, c
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(consumer C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
         f'set(url "{archive.as_uri()}")\nset(expected "{checksum}")\n'
-        'set(root "${CMAKE_BINARY_DIR}/defer-release/${expected}")\nfile(MAKE_DIRECTORY "${root}")\n'
+        'set(root "${CMAKE_BINARY_DIR}/recast-release/${expected}")\nfile(MAKE_DIRECTORY "${root}")\n'
         'if(NOT EXISTS "${root}/defer.zip")\n'
         '  file(DOWNLOAD "${url}" "${root}/defer.zip" EXPECTED_HASH "SHA256=${expected}" TLS_VERIFY ON)\n'
         'endif()\n'
