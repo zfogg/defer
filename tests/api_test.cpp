@@ -22,12 +22,13 @@ int main() {
       "#include \"recast/recast.h\"\n"
       "int f(void) { int offset = 10; int total = 0; "
       "recast_closure(add, int, (int x), (copy(offset), ref(total)), "
-      "{ int result = x + offset; total += result; return result; }); "
+      "{ DEFER(total += 100); int result = x + offset; total += result; return result; }); "
       "return recast_call(add, 5) + total; }\n",
       {"-I" DEFER_TEST_INCLUDE, "-std=gnu17"});
   CHECK(closure.find("recast_closure") == std::string::npos);
   CHECK(closure.find("recast_call") == std::string::npos);
   CHECK(closure.find("__recast_add_offset") != std::string::npos);
+  CHECK(closure.find("__defer_active_") != std::string::npos);
   try {
     (void)defer_tool::transform_source("", "void f(void) {}\n");
     CHECK(false);
