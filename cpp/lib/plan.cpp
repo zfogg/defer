@@ -68,8 +68,8 @@ void plan_batches(const fs::path &records, const fs::path &build_path, const std
     auto digest = hash.final();
     const auto id = llvm::toHex(digest, true).substr(0, 24);
     const auto name = cmake_literal("defer-" + id);
-    const auto manifest = build_directory / "defer_transformed" / ("batch-" + id + ".txt");
-    const auto depfile = build_directory / "defer_transformed" / ("batch-" + id + ".d");
+    const auto manifest = build_directory / "recast_transformed" / ("batch-" + id + ".txt");
+    const auto depfile = build_directory / "recast_transformed" / ("batch-" + id + ".d");
     std::string content, sources, outputs;
     std::set<std::string> targets;
     for (const auto &entry : entries) {
