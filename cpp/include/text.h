@@ -122,6 +122,10 @@ inline bool may_contain_defer(std::string_view source) {
         continue;
       pos = end + 2;
     }
+    if (source.substr(pos, 2) == "//") {
+      const auto end = source.find('\n', pos + 2);
+      pos = end == source.npos ? source.size() : end + 1;
+    }
     while (pos < source.size() && (source[pos] == ' ' || source[pos] == '\t' || source[pos] == '\r' ||
                                    source[pos] == '\n' || source[pos] == '\f' || source[pos] == '\v'))
       ++pos;
