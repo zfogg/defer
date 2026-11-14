@@ -189,7 +189,7 @@ def main() -> None:
     parser.add_argument("--name", required=True)
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--jobs", type=int, default=2)
+    parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--musl", action="store_true")
     args = parser.parse_args()
     work = args.work.resolve()
