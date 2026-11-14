@@ -373,6 +373,7 @@ int main(int argc, char **argv) {
       defer_tool::verify_libclang(std::filesystem::u8path(libclang.getValue()));
     defer_tool::DriverOptions options;
     options.preamble = preamble;
+    options.enable_defer = enabled_transforms.count("defer") != 0;
     options.enable_closures = enabled_transforms.count("closures") != 0;
     if (!header_overlay.empty())
       options.header_overlay = std::filesystem::absolute(std::filesystem::u8path(header_overlay.getValue()));

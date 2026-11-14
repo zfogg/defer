@@ -806,7 +806,7 @@ TransformResult transform_content(ClangIndex &index, const fs::path &source_path
     return {std::move(dependencies), std::move(content)};
   }
   auto unit = parse_wrapped(index.get(), source_name, raw, content, options.preamble);
-  auto transformed = transform(unit->get(), source.u8string(), content, objc);
+  auto transformed = options.enable_defer ? transform(unit->get(), source.u8string(), content, objc) : content;
   FileDependencies dependencies{output, {source.u8string()}};
   clang_getInclusions(
       unit->get(),
