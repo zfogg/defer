@@ -1,8 +1,8 @@
-# defer
+# Recast
 
 [GitHub](https://github.com/zfogg/defer) · [Documentation](https://zfogg.github.io/defer/) · [C++ and C API](https://zfogg.github.io/defer/cpp/) · [Python API](https://zfogg.github.io/defer/python/)
 
-`defer` provides block-scoped cleanup for C and Objective-C, and a native C++ scope guard. The `defer-tool` source transformer uses LLVM 19 or newer and libclang. Cleanup is registered when execution reaches `defer(...)` and runs in reverse order on supported block exits. It does not run on `longjmp` or process termination. Unsupported cases produce an error.
+`Recast` is a source-transformation pipeline. Its defer pass provides block-scoped cleanup for C and Objective-C, and a native C++ scope guard; its closure pass provides borrowed synchronous closures. The `recast` source transformer uses LLVM 19 or newer and libclang. Existing defer spellings remain unchanged. Unsupported cases produce an error.
 
 ## Build and install
 
@@ -23,7 +23,7 @@ cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++ `
   -DDEFER_LLVM_DEV_ROOT="C:/path/to/llvm-dev"
 cmake --build build
 ctest --test-dir build --output-on-failure
-cmake --install build --prefix "C:/path/to/defer-install"
+cmake --install build --prefix "C:/path/to/recast-install"
 ```
 
 The Scoop LLVM package provides the compiler; use the separate LLVM development archive for the headers and libraries required by this build. Match their LLVM versions and target architecture.
