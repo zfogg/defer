@@ -196,7 +196,7 @@ def main() -> None:
     work.mkdir(parents=True, exist_ok=True)
     source = download_source(work)
     llvm = configure_llvm(work, source, args.jobs)
-    build = work / "defer-build"
+    build = work / "recast-build"
     stage = work / "stage"
     compiler = "clang-cl" if sys.platform == "win32" else "/usr/bin/clang" if sys.platform == "darwin" else "clang"
     cxx = "clang-cl" if sys.platform == "win32" else "/usr/bin/clang++" if sys.platform == "darwin" else "clang++"
