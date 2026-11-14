@@ -33,7 +33,7 @@ def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend
     )
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(probe C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'include("{(ROOT / "Defer.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
+        f'include("{(ROOT / "Recast.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
         f'target_include_directories(probe PRIVATE "{(ROOT / "cpp/include").as_posix()}")\n'
         'target_compile_options(probe PRIVATE -sASSERTIONS=1)\nset_property(TARGET probe PROPERTY C_STANDARD 17)\n'
         'defer_target(probe)\n', encoding="utf-8"
@@ -75,7 +75,7 @@ def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) ->
     )
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(probe C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'include("{(ROOT / "Defer.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
+        f'include("{(ROOT / "Recast.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
         f'target_include_directories(probe PRIVATE "{(ROOT / "cpp/include").as_posix()}")\ndefer_target(probe)\n',
         encoding="utf-8",
     )
@@ -110,7 +110,7 @@ def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path, bac
     (project / "other.c").write_text("int other(void) { return 3; }\n", encoding="utf-8")
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(hook C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'include("{(ROOT / "Defer.cmake").as_posix()}")\n'
+        f'include("{(ROOT / "Recast.cmake").as_posix()}")\n'
         'function(preprocess out target source relative compiled)\n'
         '  set(generated "${CMAKE_BINARY_DIR}/preprocessed/${relative}")\n'
         '  get_filename_component(dir "${generated}" DIRECTORY)\n'
@@ -168,10 +168,10 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, c
         'if(NOT EXISTS "${root}/defer.zip")\n'
         '  file(DOWNLOAD "${url}" "${root}/defer.zip" EXPECTED_HASH "SHA256=${expected}" TLS_VERIFY ON)\n'
         'endif()\n'
-        'if(CMAKE_HOST_WIN32)\n set(tool "${root}/bin/defer-tool.exe")\nelse()\n set(tool "${root}/bin/defer-tool")\nendif()\n'
+        'if(CMAKE_HOST_WIN32)\n set(tool "${root}/bin/recast.exe")\nelse()\n set(tool "${root}/bin/recast")\nendif()\n'
         'if(NOT EXISTS "${tool}")\n file(ARCHIVE_EXTRACT INPUT "${root}/defer.zip" DESTINATION "${root}")\nendif()\n'
-        'execute_process(COMMAND "${tool}" cmake-config --write-file "${root}/Defer.cmake" COMMAND_ERROR_IS_FATAL ANY)\n'
-        'set(DEFER_NATIVE_BINARY "${tool}")\ninclude("${root}/Defer.cmake")\n'
+        'execute_process(COMMAND "${tool}" cmake-config --write-file "${root}/Recast.cmake" COMMAND_ERROR_IS_FATAL ANY)\n'
+        'set(DEFER_NATIVE_BINARY "${tool}")\ninclude("${root}/Recast.cmake")\n'
         'add_executable(consumer main.c)\ntarget_include_directories(consumer PRIVATE "${root}/include")\n'
         'defer_targets(consumer)\n', encoding="utf-8"
     )

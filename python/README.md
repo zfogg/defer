@@ -4,7 +4,7 @@
 
 The Python implementation transforms C and Objective-C cleanup statements using
 libclang. It supports the same single-file and batch interfaces as the native
-`defer-tool`, and is useful for development, inspection, and comparing the two
+`recast`, and is useful for development, inspection, and comparing the two
 implementations. C++ sources use native scope guards.
 
 ## Run the tool

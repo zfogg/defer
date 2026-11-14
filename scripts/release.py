@@ -216,7 +216,7 @@ def main() -> None:
     shutil.copytree(source / "clang/include/clang-c", stage / "include/clang-c", dirs_exist_ok=True)
     combine_archives(stage, llvm)
     verify_sdk(work, stage, cxx)
-    binary = stage / "bin" / ("defer-tool.exe" if sys.platform == "win32" else "defer-tool")
+    binary = stage / "bin" / ("recast.exe" if sys.platform == "win32" else "recast")
     run(binary, "--help")
     verify_linkage(binary, args.musl)
     shared = stage / ("bin/defer-shared.dll" if sys.platform == "win32" else
