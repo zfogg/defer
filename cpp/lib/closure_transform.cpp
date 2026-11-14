@@ -236,58 +236,6 @@ std::string transform_closures(const std::string &source) {
     }
   }
   return output;
-  /* The typed file-scope lowering below is retained as design scaffolding
-     until declaration-identity type resolution is available. */
-#if 0
-  std::string generated;
-  std::vector<std::pair<std::size_t, std::size_t>> replacements;
-  for (const auto &closure : closures) {
-    const auto env = "__recast_env_" + std::to_string(closure.id);
-    const auto handle = "__recast_handle_" + std::to_string(closure.id);
-    const auto fn = "__recast_fn_" + std::to_string(closure.id);
-    generated += "struct " + env + " {";
-    for (const auto &capture : closure.captures)
-      generated += capture.reference ? " __typeof__(&" + capture.name + ") " + capture.name + ";" :
-                                       " __typeof__(" + capture.name + ") " + capture.name + ";";
-    generated += "};\n";
-    std::map<std::string, std::string> names;
-    for (const auto &capture : closure.captures)
-      names.emplace(capture.name, capture.reference ? "(*__recast_env->" + capture.name + ")" : "__recast_env->" + capture.name);
-    generated += "static " + closure.result + " " + fn + "(struct " + env + " *__recast_env";
-    if (!closure.parameters.empty() && closure.parameters != "void") generated += ", " + closure.parameters;
-    generated += ") " + replace_captures(closure.body, names) + "\n";
-    generated += "struct " + handle + " { struct " + env + " ctx; " + closure.result + " (*fn)(struct " + env + " *";
-    if (!closure.parameters.empty() && closure.parameters != "void") generated += ", " + closure.parameters;
-    generated += "); };\n";
-    std::string initializer = "struct " + handle + " " + closure.name + " = {{";
-    for (std::size_t i = 0; i < closure.captures.size(); ++i) {
-      if (i) initializer += ", ";
-      initializer += closure.captures[i].reference ? "&" + closure.captures[i].name : closure.captures[i].name;
-    }
-    initializer += "}, " + fn + "};";
-    replacements.emplace_back(closure.begin, closure.end);
-    generated += "\n";
-    const auto call = "recast_call(" + closure.name;
-    (void)call;
-  }
-  std::string output = source;
-  for (auto it = closures.rbegin(); it != closures.rend(); ++it)
-    output.replace(it->begin, it->end - it->begin, "struct __recast_handle_" + std::to_string(it->id) + " " + it->name + " = {{" +
-                   [&] { std::string s; for (std::size_t i = 0; i < it->captures.size(); ++i) { if (i) s += ", "; s += it->captures[i].reference ? "&" + it->captures[i].name : it->captures[i].name; } return s; }() +
-                   "}, __recast_fn_" + std::to_string(it->id) + "};");
-  for (const auto &closure : closures) {
-    const std::string call = "recast_call(" + closure.name;
-    std::size_t pos = 0;
-    while ((pos = output.find(call, pos)) != std::string::npos) {
-      const auto open = output.find('(', pos + 11);
-      const auto close = matching(output, open, '(', ')');
-      const auto arguments = trim(output.substr(open + 1, close - open - 1));
-      output.replace(pos, close - pos + 1, closure.name + ".fn(&" + closure.name + ".ctx" + (arguments.empty() ? "" : ", " + arguments) + ")");
-      pos += closure.name.size() + 10;
-    }
-  }
-  return generated + output;
-#endif
 }
 
 } // namespace defer_tool
