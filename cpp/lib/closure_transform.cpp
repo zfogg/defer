@@ -120,8 +120,36 @@ std::string parameters_for_call(std::string parameters) {
 
 std::string replace_captures(std::string_view body, const std::map<std::string, std::string> &replacements) {
   std::string result;
+  bool line_comment = false;
+  bool block_comment = false;
+  bool string = false;
+  char quote = 0;
   for (std::size_t i = 0; i < body.size();) {
-    if (std::isalpha(static_cast<unsigned char>(body[i])) || body[i] == '_') {
+    const char c = body[i];
+    const char next = i + 1 < body.size() ? body[i + 1] : 0;
+    if (line_comment) {
+      result += c;
+      ++i;
+      if (c == '\n') line_comment = false;
+      continue;
+    }
+    if (block_comment) {
+      result += c;
+      ++i;
+      if (c == '*' && next == '/') { result += next; ++i; block_comment = false; }
+      continue;
+    }
+    if (string) {
+      result += c;
+      ++i;
+      if (c == '\\' && i < body.size()) { result += body[i++]; continue; }
+      if (c == quote) string = false;
+      continue;
+    }
+    if (c == '/' && next == '/') { result += "//"; i += 2; line_comment = true; continue; }
+    if (c == '/' && next == '*') { result += "/*"; i += 2; block_comment = true; continue; }
+    if (c == '"' || c == '\'') { result += c; ++i; string = true; quote = c; continue; }
+    if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
       const auto begin = i++;
       while (i < body.size() && (std::isalnum(static_cast<unsigned char>(body[i])) || body[i] == '_')) ++i;
       const std::string name(body.substr(begin, i - begin));
