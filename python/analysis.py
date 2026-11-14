@@ -59,7 +59,7 @@ def macro_reaches_defer(name: str, definitions: dict[str, list[cindex.Cursor]], 
 
 def expand_defer_wrappers(tu: cindex.TranslationUnit, path: Path, source: bytes,
                           allow_other_files: bool = False) -> bytes:
-    markers = {"defer", "defer_named", "defer_cancel"}
+    markers = {"DEFER", "DEFER_NAMED", "DEFER_CANCEL", "defer", "defer_named", "defer_cancel"}
     if tu.cursor is None:
         raise TransformError("Clang returned no translation unit cursor")
     nodes = list(tu.cursor.get_children())
@@ -240,7 +240,8 @@ class Transformer:
             if cursor.kind == cindex.CursorKind.MACRO_DEFINITION:
                 self.macro_definitions.setdefault(cursor.spelling, []).append(cursor)
             if (cursor.kind == cindex.CursorKind.MACRO_INSTANTIATION
-                and cursor.spelling in ("defer", "defer_named", "defer_cancel")):
+                and cursor.spelling in ("DEFER", "DEFER_NAMED", "DEFER_CANCEL",
+                                        "defer", "defer_named", "defer_cancel")):
                 if self.in_file(cursor):
                     self.macros[cursor.extent.start.offset] = cursor
                 elif cursor.location.file and not self.allow_other_files:
@@ -290,7 +291,9 @@ class Transformer:
         }
         pending = list(found)
         visited: set[str] = set()
-        forbidden = {"return", "goto", "break", "continue", "defer", "defer_named", "defer_cancel"}
+        forbidden = {"return", "goto", "break", "continue",
+                     "DEFER", "DEFER_NAMED", "DEFER_CANCEL",
+                     "defer", "defer_named", "defer_cancel"}
         while pending:
             name = pending.pop()
             if name == "__COUNTER__":
@@ -542,7 +545,7 @@ class Transformer:
     def visit_defer(self, start: int, parent_kind: cindex.CursorKind | None) -> None:
         macro = self.macros[start]
         name = macro.spelling
-        if name != "defer_cancel" and parent_kind != cindex.CursorKind.COMPOUND_STMT:
+        if name not in ("DEFER_CANCEL", "defer_cancel") and parent_kind != cindex.CursorKind.COMPOUND_STMT:
             raise TransformError(
                 self.diagnostic(start, "defer must be a direct statement in a block; add braces around the statement")
             )
@@ -558,13 +561,13 @@ class Transformer:
         argument = tokens.index(opening) + 1
         handle = ""
         action_offset = start + open_paren + 1
-        if name != "defer":
+        if name not in ("DEFER", "defer"):
             if (argument + 1 >= len(tokens) or tokens[argument].kind != cindex.TokenKind.IDENTIFIER
-                or tokens[argument + 1].spelling != ("," if name == "defer_named" else ")")
-                or (name == "defer_cancel" and argument + 2 != len(tokens))):
+                or tokens[argument + 1].spelling != ("," if name in ("DEFER_NAMED", "defer_named") else ")")
+                or (name in ("DEFER_CANCEL", "defer_cancel") and argument + 2 != len(tokens))):
                 raise TransformError(self.diagnostic(start, f"{name} requires a single identifier handle"))
             handle = tokens[argument].spelling
-            if name == "defer_cancel":
+            if name in ("DEFER_CANCEL", "defer_cancel"):
                 for scope in reversed(self.scopes):
                     for existing in reversed(scope.defers):
                         if existing.handle == handle:
@@ -584,8 +587,10 @@ class Transformer:
         action = raw_action.strip()
         if not action:
             raise TransformError(f"empty defer at byte {start}")
-        forbidden = {"return", "goto", "break", "continue", "defer", "defer_named", "defer_cancel"}
-        action_tokens = tokens[1 if name == "defer" else argument + 2:]
+        forbidden = {"return", "goto", "break", "continue",
+                     "DEFER", "DEFER_NAMED", "DEFER_CANCEL",
+                     "defer", "defer_named", "defer_cancel"}
+        action_tokens = tokens[1 if name in ("DEFER", "defer") else argument + 2:]
         for token in action_tokens:
             if token.spelling in forbidden:
                 raise TransformError(
