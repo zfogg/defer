@@ -72,7 +72,7 @@ llvm::cl::opt<std::string> show_location("show-transformed",
                                          llvm::cl::desc("Show the transformed function at source:line"));
 llvm::cl::opt<std::string> transforms(
     "transforms",
-    llvm::cl::desc("Comma-separated transformation passes (defer; closures is not implemented yet)"),
+    llvm::cl::desc("Comma-separated transformation passes (defer, closures; closures run before defer)"),
     llvm::cl::init("defer"));
 
 using FileMetadata = std::pair<long long, std::uintmax_t>;
@@ -317,10 +317,6 @@ int main(int argc, char **argv) {
         throw std::runtime_error("unknown transformation pass: " + transform_name);
       enabled_transforms.insert(transform_name);
     }
-    if (!enabled_transforms.count("defer"))
-      throw std::runtime_error("the defer transformation is currently required");
-    if (enabled_transforms.count("closures"))
-      throw std::runtime_error("the closures transformation is not implemented yet");
     const bool dash_stream = sources.size() >= 2 && sources[0] == "-" && sources[1] == "-";
     unsigned separator = static_cast<unsigned>(argc);
     for (int i = 1; i < argc; ++i)
@@ -377,6 +373,7 @@ int main(int argc, char **argv) {
       defer_tool::verify_libclang(std::filesystem::u8path(libclang.getValue()));
     defer_tool::DriverOptions options;
     options.preamble = preamble;
+    options.enable_closures = enabled_transforms.count("closures") != 0;
     if (!header_overlay.empty())
       options.header_overlay = std::filesystem::absolute(std::filesystem::u8path(header_overlay.getValue()));
     if (!compilation_database.empty())

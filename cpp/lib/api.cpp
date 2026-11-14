@@ -15,6 +15,7 @@ std::string transform_source(const std::string &filename, const std::string &sou
   ClangIndex index;
   DriverOptions options;
   options.clang_arguments = clang_arguments;
+  options.enable_closures = true;
   return transform_content(index, filename, {}, source, options).contents;
 }
 

@@ -1,4 +1,5 @@
 #include "driver.h"
+#include "closure_transform.h"
 #include "text.h"
 #include "transform.h"
 
@@ -766,6 +767,8 @@ TransformResult transform_content(ClangIndex &index, const fs::path &source_path
   const bool objc = is_objc_source(source, arguments);
   if (objc)
     require_objc_exceptions(arguments);
+  if (options.enable_closures)
+    content = transform_closures(content);
   arguments.push_back("-DDEFER_PARSING=1");
   arguments.push_back("-DRECAST_PARSING=1");
   std::vector<const char *> raw;
