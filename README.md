@@ -100,7 +100,7 @@ Obtain `Recast.cmake` from the release binary, including when shell redirection 
 recast cmake-config --write-file Recast.cmake
 ```
 
-Set `CMAKE_EXPORT_COMPILE_COMMANDS` to `ON`, point `DEFER_NATIVE_BINARY` at the host tool, include the generated module, and call `defer_targets` after creating the targets:
+Set `CMAKE_EXPORT_COMPILE_COMMANDS` to `ON`, point `DEFER_NATIVE_BINARY` at the host tool, include the generated module, and call `recast_targets` after creating the targets:
 
 ```cmake
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -108,7 +108,7 @@ set(DEFER_NATIVE_BINARY "/path/to/recast")
 include("${CMAKE_CURRENT_SOURCE_DIR}/Recast.cmake")
 add_executable(app main.c)
 target_include_directories(app PRIVATE "/path/to/defer/include")
-defer_targets(app)
+recast_targets(app)
 ```
 
 The module uses batch transformation and the compilation database, supports incremental rebuilds and header overlays, and requires single-config Ninja or Unix Makefiles. Include `defer.h` in source files. See `examples/hello_world_cmake` for an example.
@@ -140,32 +140,32 @@ source has no defer. The hook is responsible for tracking its generated file's d
 For a release archive, CMake can download the appropriate host archive and generate the module during configuration. Set `DEFER_ARCHIVE_URL` to a versioned release ZIP and `DEFER_ARCHIVE_SHA256` to its published checksum:
 
 ```cmake
-set(_defer_dir "${CMAKE_BINARY_DIR}/defer-release/${DEFER_ARCHIVE_SHA256}")
-file(MAKE_DIRECTORY "${_defer_dir}")
-if(NOT EXISTS "${_defer_dir}/defer.zip")
-  file(DOWNLOAD "${DEFER_ARCHIVE_URL}" "${_defer_dir}/defer.zip"
+set(_recast_dir "${CMAKE_BINARY_DIR}/recast-release/${DEFER_ARCHIVE_SHA256}")
+file(MAKE_DIRECTORY "${_recast_dir}")
+if(NOT EXISTS "${_recast_dir}/recast.zip")
+  file(DOWNLOAD "${DEFER_ARCHIVE_URL}" "${_recast_dir}/recast.zip"
        EXPECTED_HASH "SHA256=${DEFER_ARCHIVE_SHA256}" TLS_VERIFY ON)
 else()
-  file(SHA256 "${_defer_dir}/defer.zip" _defer_archive_hash)
+  file(SHA256 "${_recast_dir}/recast.zip" _defer_archive_hash)
   if(NOT _defer_archive_hash STREQUAL DEFER_ARCHIVE_SHA256)
-    message(FATAL_ERROR "Cached defer archive does not match DEFER_ARCHIVE_SHA256")
+    message(FATAL_ERROR "Cached Recast archive does not match DEFER_ARCHIVE_SHA256")
   endif()
 endif()
 
-set(DEFER_NATIVE_BINARY "${_defer_dir}/bin/recast${CMAKE_EXECUTABLE_SUFFIX}")
+set(DEFER_NATIVE_BINARY "${_recast_dir}/bin/recast${CMAKE_EXECUTABLE_SUFFIX}")
 
 if(NOT EXISTS "${DEFER_NATIVE_BINARY}")
-  file(ARCHIVE_EXTRACT INPUT "${_defer_dir}/defer.zip" DESTINATION "${_defer_dir}")
+  file(ARCHIVE_EXTRACT INPUT "${_recast_dir}/recast.zip" DESTINATION "${_recast_dir}")
 endif()
-execute_process(COMMAND "${DEFER_NATIVE_BINARY}" cmake-config --write-file "${_defer_dir}/Recast.cmake"
+execute_process(COMMAND "${DEFER_NATIVE_BINARY}" cmake-config --write-file "${_recast_dir}/Recast.cmake"
                 COMMAND_ERROR_IS_FATAL ANY)
-include("${_defer_dir}/Recast.cmake")
+include("${_recast_dir}/Recast.cmake")
 # After add_executable(app ...):
-target_include_directories(app PRIVATE "${_defer_dir}/include")
-defer_targets(app)
+target_include_directories(app PRIVATE "${_recast_dir}/include")
+recast_targets(app)
 ```
 
-Choose the ZIP for the **build host**, including for cross compilation. Set `CMAKE_EXPORT_COMPILE_COMMANDS=ON` before configuring targets. The module's `DEFER_SOURCE_DIRS` and `DEFER_WRAPPER_HEADER_DIRS` options control which project and external headers it scans. The [documentation site](https://zfogg.github.io/defer/) describes scope, restrictions, and the SDK.
+Choose the ZIP for the **build host**, including for cross compilation. Set `CMAKE_EXPORT_COMPILE_COMMANDS=ON` before configuring targets. The module's `DEFER_SOURCE_DIRS` and `DEFER_WRAPPER_HEADER_DIRS` options control which project and external headers it scans. The [documentation site](https://zfogg.github.io/recast/) describes scope, restrictions, and the SDK.
 
 Header discovery skips nested virtual environments, `node_modules`, VCS metadata, and the current build directory. If a needed wrapper is inside one of those trees, list its directory explicitly in `DEFER_WRAPPER_HEADER_DIRS`.
 

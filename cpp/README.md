@@ -22,7 +22,7 @@ recast --filename input.c -- -std=c17 -Iinclude < input.c > output.c
 
 `recast cmake-config --write-file Recast.cmake` emits the self-contained
 CMake integration. Set `CMAKE_EXPORT_COMPILE_COMMANDS=ON`, include the module,
-and call `defer_targets(...)` after creating your targets. The project-level
+and call `recast_targets(...)` after creating your targets. The project-level
 README includes download and configuration examples.
 
 ## SDK
