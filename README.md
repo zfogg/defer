@@ -94,10 +94,10 @@ The native executable also exposes LLVM's general command-line options in `--hel
 
 ## Use with CMake
 
-Obtain `Defer.cmake` from the release binary, including when shell redirection is unavailable:
+Obtain `Recast.cmake` from the release binary, including when shell redirection is unavailable:
 
 ```sh
-recast cmake-config --write-file Defer.cmake
+recast cmake-config --write-file Recast.cmake
 ```
 
 Set `CMAKE_EXPORT_COMPILE_COMMANDS` to `ON`, point `DEFER_NATIVE_BINARY` at the host tool, include the generated module, and call `defer_targets` after creating the targets:
@@ -105,7 +105,7 @@ Set `CMAKE_EXPORT_COMPILE_COMMANDS` to `ON`, point `DEFER_NATIVE_BINARY` at the 
 ```cmake
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(DEFER_NATIVE_BINARY "/path/to/recast")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Defer.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Recast.cmake")
 add_executable(app main.c)
 target_include_directories(app PRIVATE "/path/to/defer/include")
 defer_targets(app)
@@ -157,9 +157,9 @@ set(DEFER_NATIVE_BINARY "${_defer_dir}/bin/recast${CMAKE_EXECUTABLE_SUFFIX}")
 if(NOT EXISTS "${DEFER_NATIVE_BINARY}")
   file(ARCHIVE_EXTRACT INPUT "${_defer_dir}/defer.zip" DESTINATION "${_defer_dir}")
 endif()
-execute_process(COMMAND "${DEFER_NATIVE_BINARY}" cmake-config --write-file "${_defer_dir}/Defer.cmake"
+execute_process(COMMAND "${DEFER_NATIVE_BINARY}" cmake-config --write-file "${_defer_dir}/Recast.cmake"
                 COMMAND_ERROR_IS_FATAL ANY)
-include("${_defer_dir}/Defer.cmake")
+include("${_defer_dir}/Recast.cmake")
 # After add_executable(app ...):
 target_include_directories(app PRIVATE "${_defer_dir}/include")
 defer_targets(app)
