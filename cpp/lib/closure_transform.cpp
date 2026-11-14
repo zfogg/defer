@@ -250,15 +250,25 @@ std::string transform_closures(const std::string &source) {
         throw std::runtime_error("Recast void closure takes no arguments");
       }
       auto lowered_body = body;
+      std::string result_expression;
       const auto return_pos = lowered_body.rfind("return");
       if (return_pos != std::string::npos) {
         const auto semicolon = lowered_body.find(';', return_pos);
         if (semicolon == std::string::npos)
           throw std::runtime_error("Recast closure return must end with a semicolon");
         auto value = trim(lowered_body.substr(return_pos + 6, semicolon - return_pos - 6));
-        lowered_body.replace(return_pos, semicolon - return_pos + 1, value.empty() ? "(void)0;" : value + ";");
+        if (value.empty())
+          lowered_body.replace(return_pos, semicolon - return_pos + 1, "(void)0;");
+        else {
+          result_expression = "__recast_result_" + closure.name;
+          lowered_body.replace(return_pos, semicolon - return_pos + 1, result_expression + " = " + value + ";");
+        }
       }
-      expression += lowered_body + " })";
+      if (!result_expression.empty())
+        expression += closure.result + " " + result_expression + " = (" + closure.result + "){0}; ";
+      expression += lowered_body;
+      if (!result_expression.empty()) expression += " " + result_expression + ";";
+      expression += " })";
       output.replace(pos, close - pos + 1, expression);
       pos += expression.size();
     }
