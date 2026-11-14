@@ -21,6 +21,11 @@ int main() {
   CHECK(may_contain_defer("defer \\\n(cleanup());"));
   CHECK(!may_contain_defer("not_defer(x); deferred(x);"));
   CHECK(!may_contain_defer("defer /* unterminated"));
+  CHECK(may_contain_closure("recast_closure(add, int, (int x), (), { return x; });"));
+  CHECK(may_contain_closure("recast_call(add, 5);"));
+  CHECK(may_contain_closure("recast_bind(fn, add_impl, (state));"));
+  CHECK(may_contain_transform("recast_call(done);"));
+  CHECK(!may_contain_closure("recast_closure_helper_name;"));
   CHECK(is_keyword_at("break;", 0, "break"));
   CHECK(!is_keyword_at("break_if(x)", 0, "break"));
   CHECK(!is_keyword_at("return2;", 0, "return"));
