@@ -25,10 +25,10 @@ def command(request: pytest.FixtureRequest) -> list[str]:
 
 
 def test_cmake_config_stdout_and_write_file(command: list[str], tmp_path: Path) -> None:
-    expected = (ROOT / "Defer.cmake").read_bytes().replace(b"\r\n", b"\n")
+    expected = (ROOT / "Recast.cmake").read_bytes().replace(b"\r\n", b"\n")
     result = subprocess.run([*command, "cmake-config"], capture_output=True, check=True)
     assert result.stdout.replace(b"\r\n", b"\n") == expected
-    destination = tmp_path / "Defer.cmake"
+    destination = tmp_path / "Recast.cmake"
     result = subprocess.run([*command, "cmake-config", "--write-file", str(destination)], capture_output=True, check=True)
     assert result.stdout == b""
     assert destination.read_bytes().replace(b"\r\n", b"\n") == expected

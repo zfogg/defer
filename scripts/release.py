@@ -222,9 +222,9 @@ def main() -> None:
     shared = stage / ("bin/defer-shared.dll" if sys.platform == "win32" else
                       "lib/libdefer-shared.dylib" if sys.platform == "darwin" else "lib/libdefer-shared.so")
     verify_linkage(shared)
-    generated = work / "Defer.cmake"
+    generated = work / "Recast.cmake"
     run(binary, "cmake-config", "--write-file", generated)
-    if generated.read_bytes().replace(b"\r\n", b"\n") != (ROOT / "Defer.cmake").read_bytes().replace(b"\r\n", b"\n"):
+    if generated.read_bytes().replace(b"\r\n", b"\n") != (ROOT / "Recast.cmake").read_bytes().replace(b"\r\n", b"\n"):
         raise RuntimeError("embedded CMake configuration differs from source")
     output = work / "hello.c"
     run(binary, ROOT / "examples/hello_world/main.c", output, "--", f"-I{stage / 'include'}")

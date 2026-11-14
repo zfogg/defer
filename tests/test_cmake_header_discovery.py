@@ -21,7 +21,7 @@ def test_discovery_tracks_included_objc_files(tmp_path: Path, extension: str) ->
     project.mkdir()
     objc = project / f"included.{extension}"
     objc.write_text("#define OBJC_CLEANUP(action) defer(action)\n", encoding="utf-8")
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(scan LANGUAGES NONE)\n'
         f'include("{module}")\nset(_batch_stage test)\n'
@@ -62,7 +62,7 @@ def test_discovery_prunes_environments_and_keeps_explicit_roots(tmp_path: Path) 
         linked.mkdir()
         (linked / "linked.h").write_text("#define SYMLINKED(action) defer(action)\n", encoding="utf-8")
         (project / "src" / "link").symlink_to(linked, target_is_directory=True)
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     (project / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.25)\nproject(scan LANGUAGES NONE)\n"
         'set(DEFER_SOURCE_ROOT "${CMAKE_SOURCE_DIR}")\nset(DEFER_SOURCE_DIRS src CACHE STRING "")\n'
