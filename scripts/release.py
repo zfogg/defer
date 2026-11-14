@@ -1,4 +1,4 @@
-"""Build and validate one self-contained defer release archive."""
+"""Build and validate one self-contained Recast release archive."""
 from __future__ import annotations
 
 import argparse
@@ -244,7 +244,7 @@ def main() -> None:
     run("cmake", "--build", example_build)
     run(example_build / ("hello.exe" if sys.platform == "win32" else "hello"))
     args.output.mkdir(parents=True, exist_ok=True)
-    archive = args.output / f"defer-{args.name}.zip"
+    archive = args.output / f"recast-{args.name}.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zip_file:
         for path in stage.rglob("*"):
             if path.is_file():
