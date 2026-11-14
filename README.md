@@ -97,14 +97,14 @@ The native executable also exposes LLVM's general command-line options in `--hel
 Obtain `Defer.cmake` from the release binary, including when shell redirection is unavailable:
 
 ```sh
-defer-tool cmake-config --write-file Defer.cmake
+recast cmake-config --write-file Defer.cmake
 ```
 
 Set `CMAKE_EXPORT_COMPILE_COMMANDS` to `ON`, point `DEFER_NATIVE_BINARY` at the host tool, include the generated module, and call `defer_targets` after creating the targets:
 
 ```cmake
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(DEFER_NATIVE_BINARY "/path/to/defer-tool")
+set(DEFER_NATIVE_BINARY "/path/to/recast")
 include("${CMAKE_CURRENT_SOURCE_DIR}/Defer.cmake")
 add_executable(app main.c)
 target_include_directories(app PRIVATE "/path/to/defer/include")
@@ -152,7 +152,7 @@ else()
   endif()
 endif()
 
-set(DEFER_NATIVE_BINARY "${_defer_dir}/bin/defer-tool${CMAKE_EXECUTABLE_SUFFIX}")
+set(DEFER_NATIVE_BINARY "${_defer_dir}/bin/recast${CMAKE_EXECUTABLE_SUFFIX}")
 
 if(NOT EXISTS "${DEFER_NATIVE_BINARY}")
   file(ARCHIVE_EXTRACT INPUT "${_defer_dir}/defer.zip" DESTINATION "${_defer_dir}")
