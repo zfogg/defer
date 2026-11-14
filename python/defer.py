@@ -446,7 +446,7 @@ def batch_main() -> int:
 
 def main(protected_paths: list[Path] | None = None) -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "cmake-config":
-    config = Path(__file__).resolve().parent.parent / "Recast.cmake"
+        config = Path(__file__).resolve().parent.parent / "Recast.cmake"
         if not config.is_file():
             try:
                 package = importlib.metadata.distribution("defer-tool")
