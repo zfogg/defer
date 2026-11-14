@@ -2402,6 +2402,21 @@ def test_named_defer_cancellation(
     assert subprocess.run([str(executable)], check=False).returncode == 0
 
 
+def test_uppercase_recast_defer_macros(
+    tmp_path: Path, transform_environment: dict[str, str]
+) -> None:
+    source = (
+        "#define DEFER(name, ...) do {} while (0)\n"
+        "#define DEFER_NAMED(name, ...) do {} while (0)\n"
+        "#define DEFER_CANCEL(name) do {} while (0)\n"
+        "static int n; static void f(void) { DEFER(n += 1); "
+        "DEFER_NAMED(done, n += 2); DEFER_CANCEL(done); }\n"
+        "int main(void) { f(); return n != 1; }\n"
+    )
+    result = transform(tmp_path, transform_environment, source)
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize(
     "body",
     [
