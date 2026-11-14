@@ -1,6 +1,6 @@
 # Native Recast tool and SDK
 
-[GitHub](https://github.com/zfogg/defer) · [Documentation](https://zfogg.github.io/defer/) · [C++ and C API](https://zfogg.github.io/defer/cpp/) · [Python API](https://zfogg.github.io/defer/python/)
+[GitHub](https://github.com/zfogg/recast) · [Documentation](https://zfogg.github.io/recast/) · [C++ and C API](https://zfogg.github.io/recast/cpp/) · [Python API](https://zfogg.github.io/recast/python/)
 
 The native `recast` tool transforms C and Objective-C sources using libclang.
 C++11 and later use a native scope guard. Cleanup is registered at the point of

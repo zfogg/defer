@@ -35,7 +35,7 @@ def main() -> None:
     readme = to_html((python_dir / "README.md").read_text(encoding="utf-8"))
     readme = re.sub(
         r'href="(?!(?:https?:|mailto:|#))((?:\.\./)*[^"#]+)',
-        lambda match: f'href="https://github.com/zfogg/defer/blob/main/{match[1].lstrip("./")}',
+        lambda match: f'href="https://github.com/zfogg/recast/blob/main/{match[1].lstrip("./")}',
         readme,
     )
     landing.write_text(text.replace(marker, f'<main class="pdoc"><section class="module-info python-landing">{readme}</section></main>'), encoding="utf-8")
@@ -49,7 +49,7 @@ def main() -> None:
 <p class="eyebrow">Developer documentation</p><h1>defer</h1><p class="lead">{html.escape(description)}</p>
 <div class="languages">{cards}</div>
 <p>Choose a language for its public types, functions and usage guidance. These references are generated from the source and published together on every main-branch update.</p>
-<p><a href="https://github.com/zfogg/defer#readme">Getting started &amp; command-line guide</a> · <a href="https://github.com/zfogg/defer">Source on GitHub</a></p>
+<p><a href="https://github.com/zfogg/recast#readme">Getting started &amp; command-line guide</a> · <a href="https://github.com/zfogg/recast">Source on GitHub</a></p>
 <footer>MIT licensed.</footer></main></body></html>\n''', encoding="utf-8")
     (output / ".nojekyll").touch()
     for language in LANGUAGES:

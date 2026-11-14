@@ -1,6 +1,6 @@
 # Python defer tool
 
-[GitHub](https://github.com/zfogg/defer) · [Documentation](https://zfogg.github.io/defer/) · [Python API](https://zfogg.github.io/defer/python/) · [C++ and C API](https://zfogg.github.io/defer/cpp/)
+[GitHub](https://github.com/zfogg/recast) · [Documentation](https://zfogg.github.io/recast/) · [Python API](https://zfogg.github.io/recast/python/) · [C++ and C API](https://zfogg.github.io/recast/cpp/)
 
 The Python implementation transforms C and Objective-C cleanup statements using
 libclang. It supports the same single-file and batch interfaces as the native
