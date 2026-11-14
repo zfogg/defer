@@ -107,8 +107,25 @@ inline bool may_contain_defer(std::string_view source) {
     const auto start = search++;
     if (start && is_identifier_byte(static_cast<unsigned char>(source[start - 1])))
       continue;
-    if (is_keyword_at(source, start, "defer") || is_keyword_at(source, start, "defer_named") ||
-        is_keyword_at(source, start, "defer_cancel"))
+    const auto keyword = is_keyword_at(source, start, "defer") ? "defer" :
+                        is_keyword_at(source, start, "defer_named") ? "defer_named" :
+                        is_keyword_at(source, start, "defer_cancel") ? "defer_cancel" : nullptr;
+    if (!keyword)
+      continue;
+    std::size_t pos = start + std::char_traits<char>::length(keyword);
+    while (pos < source.size() && (source[pos] == ' ' || source[pos] == '\t' || source[pos] == '\r' ||
+                                   source[pos] == '\n' || source[pos] == '\f' || source[pos] == '\v'))
+      ++pos;
+    if (source.substr(pos, 2) == "/*") {
+      const auto end = source.find("*/", pos + 2);
+      if (end == source.npos)
+        continue;
+      pos = end + 2;
+    }
+    while (pos < source.size() && (source[pos] == ' ' || source[pos] == '\t' || source[pos] == '\r' ||
+                                   source[pos] == '\n' || source[pos] == '\f' || source[pos] == '\v'))
+      ++pos;
+    if (pos < source.size() && source[pos] == '(')
       return true;
   }
   return false;
