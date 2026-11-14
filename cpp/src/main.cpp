@@ -296,7 +296,7 @@ int main(int argc, char **argv) {
       output << defer_cmake_config;
       return output ? 0 : 1;
     }
-    std::cerr << "defer-tool: usage: defer-tool cmake-config [--write-file PATH]\n";
+    std::cerr << "recast: usage: recast cmake-config [--write-file PATH]\n";
     return 1;
   }
   llvm::InitLLVM initializer(argc, argv);
@@ -706,12 +706,12 @@ int main(int argc, char **argv) {
     if (!depfile_path.empty())
       defer_tool::write_depfile(depfile_path, dependencies);
     if (incremental)
-      llvm::errs() << "defer-tool: transformed " << std::count(cached.begin(), cached.end(), false) << " of "
+      llvm::errs() << "recast: transformed " << std::count(cached.begin(), cached.end(), false) << " of "
                    << inputs.size() << " files (" << std::count(restored.begin(), restored.end(), true)
                    << " restored from shared cache)\n";
     return 0;
   } catch (const std::exception &error) {
-    llvm::errs() << "defer-tool: " << error.what() << '\n';
+    llvm::errs() << "recast: " << error.what() << '\n';
     return 1;
   }
 }

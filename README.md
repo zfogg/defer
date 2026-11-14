@@ -48,7 +48,7 @@ Build configuration options can be passed to CMake as `-DNAME=VALUE`:
 Build and install the tool as described above, add the installation's `bin` directory to your `PATH`, then transform and compile a source file:
 
 ```sh
-defer-tool examples/hello_world/main.c build/hello.c -- -Icpp/include
+recast examples/hello_world/main.c build/hello.c -- -Icpp/include
 clang build/hello.c -Icpp/include -o build/hello
 ./build/hello
 ```
@@ -56,10 +56,10 @@ clang build/hello.c -Icpp/include -o build/hello
 Or transform a stream (the filename determines language and relative include resolution):
 
 ```sh
-defer-tool --filename input.c -- -std=c17 -Icpp/include < input.c > output.c
+recast --filename input.c -- -std=c17 -Icpp/include < input.c > output.c
 ```
 
-Use `defer-tool --help` for batch manifests, compilation databases, diagnostics, and other options. The Python implementation can be invoked as `uv run --frozen python -m defer` and requires an LLVM libclang shared library.
+Use `recast --help` for batch manifests, compilation databases, diagnostics, and other options. The Python implementation can be invoked as `uv run --frozen python -m defer` and requires an LLVM libclang shared library.
 
 ### Command-line flags
 
