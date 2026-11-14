@@ -354,12 +354,13 @@ int main(int argc, char **argv) {
         while (std::getline(lines, source)) {
           if (!source.empty() && source.back() == '\r')
             source.pop_back();
-          if (!source.empty() && defer_tool::may_contain_defer(defer_tool::read_file(std::filesystem::u8path(source))))
+          if (!source.empty() &&
+              defer_tool::may_contain_transform(defer_tool::read_file(std::filesystem::u8path(source))))
             llvm::outs() << source << '\n';
         }
       }
       for (const auto &source : sources)
-        if (defer_tool::may_contain_defer(defer_tool::read_file(std::filesystem::u8path(source))))
+        if (defer_tool::may_contain_transform(defer_tool::read_file(std::filesystem::u8path(source))))
           llvm::outs() << source << '\n';
       return 0;
     }

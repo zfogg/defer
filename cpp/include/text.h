@@ -105,6 +105,18 @@ inline bool may_contain_defer(std::string_view source) {
   return false;
 }
 
+// Closure markers are macro arguments, so eligibility must not depend on a
+// successful ordinary C parse. As with defer scanning, false positives are
+// harmless because libclang validates the actual expansion later.
+inline bool may_contain_closure(std::string_view source) {
+  return source.find("recast_closure") != source.npos || source.find("recast_call") != source.npos ||
+         source.find("recast_bind") != source.npos;
+}
+
+inline bool may_contain_transform(std::string_view source) {
+  return may_contain_defer(source) || may_contain_closure(source);
+}
+
 inline std::string escape_depfile(std::string_view value) {
   std::string escaped;
   for (char c : value) {
