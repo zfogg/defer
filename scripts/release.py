@@ -64,7 +64,7 @@ def configure_llvm(work: Path, source: Path, jobs: int) -> Path:
     cxx = "clang-cl" if windows else "/usr/bin/clang++" if sys.platform == "darwin" else "clang++"
     args = ["cmake", "-S", source / "llvm", "-B", build, "-G", "Ninja",
             "-DCMAKE_BUILD_TYPE=Release", f"-DCMAKE_C_COMPILER={compiler}", f"-DCMAKE_CXX_COMPILER={cxx}",
-            "-DLLVM_ENABLE_PROJECTS=clang", "-DLLVM_TARGETS_TO_BUILD=all", "-DLIBCLANG_BUILD_STATIC=ON",
+            "-DLLVM_ENABLE_PROJECTS=clang", "-DLLVM_TARGETS_TO_BUILD=X86;AArch64", "-DLIBCLANG_BUILD_STATIC=ON",
             "-DLLVM_INCLUDE_TESTS=OFF", "-DCLANG_INCLUDE_TESTS=OFF", "-DLLVM_INCLUDE_EXAMPLES=OFF",
             "-DLLVM_INCLUDE_BENCHMARKS=OFF", "-DLLVM_INCLUDE_DOCS=OFF", "-DCLANG_INCLUDE_DOCS=OFF",
             "-DLLVM_ENABLE_TERMINFO=OFF", "-DLLVM_ENABLE_LIBEDIT=OFF",
