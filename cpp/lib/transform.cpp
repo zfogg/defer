@@ -433,7 +433,7 @@ void Transformer::visit(CXCursor cursor, CXCursorKind parent) {
     visit_function(cursor);
     return;
   }
-  if (objc_ && kind == CXCursor_BlockExpr) {
+  if ((objc_ && kind == CXCursor_BlockExpr) || kind == CXCursor_StmtExpr) {
     auto outer_scopes = std::move(scopes_);
     auto outer_controls = std::move(controls_);
     auto outer_labels = std::move(labels_);
