@@ -6,7 +6,7 @@ set(RECAST_HEADER_OVERLAYS "AUTO" CACHE STRING "Header overlays: AUTO, ON, or OF
 set(RECAST_NATIVE_BINARY "" CACHE FILEPATH "Host recast executable")
 set(RECAST_SHARED_CACHE "" CACHE PATH "Shared transformation cache")
 set(RECAST_WRAPPER_HEADER_DIRS "" CACHE STRING "Additional wrapper header directories")
-set(RECAST_CMAKE_TRANSFORMS "all" CACHE STRING "Comma-separated Recast transforms used by CMake (all, defer, closures)")
+set(RECAST_TRANSFORMS "all" CACHE STRING "Comma-separated Recast transforms used by CMake (all, defer, closures)")
 if(NOT DEFINED RECAST_JOBS OR RECAST_JOBS LESS 1)
   cmake_host_system_information(RESULT RECAST_JOBS QUERY NUMBER_OF_LOGICAL_CORES)
   if(NOT RECAST_JOBS OR RECAST_JOBS LESS 1)
@@ -362,7 +362,7 @@ function(recast_finish_batches)
             endif()
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "$<TARGET_FILE:recast-native>" --batch "${_manifest}"
-                    --transforms "${RECAST_CMAKE_TRANSFORMS}"
+                    --transforms "${RECAST_TRANSFORMS}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                     --jobs "${RECAST_JOBS}"
                     ${_extra_arguments}
@@ -570,12 +570,12 @@ endfunction()
 
 # Call after adding all targets in this batch. CMake must export its compilation database.
 function(recast_targets)
-  if(NOT RECAST_CMAKE_TRANSFORMS)
-    message(FATAL_ERROR "RECAST_CMAKE_TRANSFORMS must name at least one transformation")
+  if(NOT RECAST_TRANSFORMS)
+    message(FATAL_ERROR "RECAST_TRANSFORMS must name at least one transformation")
   endif()
-  if(NOT RECAST_CMAKE_TRANSFORMS STREQUAL "all" AND
-     NOT RECAST_CMAKE_TRANSFORMS MATCHES "^(defer|closures)(,(defer|closures))?$")
-    message(FATAL_ERROR "RECAST_CMAKE_TRANSFORMS must be all, defer, closures, or a comma-separated combination of them")
+  if(NOT RECAST_TRANSFORMS STREQUAL "all" AND
+     NOT RECAST_TRANSFORMS MATCHES "^(defer|closures)(,(defer|closures))?$")
+    message(FATAL_ERROR "RECAST_TRANSFORMS must be all, defer, closures, or a comma-separated combination of them")
   endif()
   if(NOT CMAKE_EXPORT_COMPILE_COMMANDS)
     message(FATAL_ERROR "recast_targets requires CMAKE_EXPORT_COMPILE_COMMANDS=ON")

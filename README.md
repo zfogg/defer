@@ -126,7 +126,7 @@ The module also accepts these CMake variables:
 | `RECAST_HEADER_OVERLAYS` | `AUTO` (default), `ON`, or `OFF`. |
 | `RECAST_SHARED_CACHE` | Directory for the native shared transformation cache. |
 | `RECAST_WRAPPER_HEADER_DIRS` | Additional directories containing defer wrapper macros. |
-| `RECAST_CMAKE_TRANSFORMS` | Comma-separated transforms used by the CMake integration; defaults to `all` (`defer`, `closures`, or both). |
+| `RECAST_TRANSFORMS` | Comma-separated transforms used by the CMake integration; defaults to `all` (`defer`, `closures`, or both). |
 | `RECAST_SOURCE_HOOK` | Optional CMake function that preprocesses eligible sources before defer. |
 | `RECAST_TOOL_ROOT` | Standalone source checkout used by the Python backend. |
 | `RECAST_PYTHON_COMMAND` | Python command used by the Python backend. |
