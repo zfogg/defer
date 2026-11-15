@@ -52,11 +52,15 @@ def main() -> int:
         stamps = " ".join(cmake_literal(Path(output).parent.as_posix() + ".deps") for _, _, output in entries)
         overlays = " ".join(cmake_literal(Path(output).parent.as_posix() + ".vfs.json") for _, _, output in entries) if args.header_overlays else ""
         overlay_argument = "--header-overlays" if args.header_overlays else ""
+        header_environment = "ON" if args.header_overlays else "OFF"
         targets = sorted({target for target, _, _ in entries})
         name = cmake_literal(f"recast-{batch_id}")
         rules.append(f"""add_custom_command(
     OUTPUT {outputs} {stamps} {overlays}
-    COMMAND ${{RECAST_PYTHON_COMMAND}} "${{RECAST_TOOL_ROOT}}/python/defer.py"
+    COMMAND "${{CMAKE_COMMAND}}" -E env
+        "RECAST_TRANSFORMS=${{RECAST_TRANSFORMS}}"
+        "RECAST_HEADER_OVERLAYS={header_environment}"
+        ${{RECAST_PYTHON_COMMAND}} "${{RECAST_TOOL_ROOT}}/python/defer.py"
         --batch {cmake_literal(manifest.as_posix())} --libclang "${{RECAST_LIBCLANG_PATH}}"
         --compilation-database "${{CMAKE_BINARY_DIR}}" --depfile {cmake_literal(depfile.as_posix())} --dependency-stamps {overlay_argument}
     DEPENDS {sources} {cmake_literal(manifest.as_posix())}
