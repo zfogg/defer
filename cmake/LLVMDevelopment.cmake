@@ -3,13 +3,6 @@ include_guard(GLOBAL)
 # Locate the host libraries used by the native defer tool. The Windows archive
 # contains only the headers and libraries needed for this tool; it does not
 # provide a complete LLVM CMake package.
-if(NOT DEFINED RECAST_LLVM_DEV_ROOT AND DEFINED ENV{RECAST_LLVM_DEV_ROOT})
-    set(RECAST_LLVM_DEV_ROOT "$ENV{RECAST_LLVM_DEV_ROOT}" CACHE PATH "LLVM development directory")
-endif()
-if(NOT DEFINED RECAST_HOST_CXX AND DEFINED ENV{RECAST_HOST_CXX})
-    set(RECAST_HOST_CXX "$ENV{RECAST_HOST_CXX}" CACHE FILEPATH "Host C++ compiler")
-endif()
-
 function(recast_find_llvm_development)
     if(TARGET recast-llvm-support AND TARGET recast-libclang)
         return()
