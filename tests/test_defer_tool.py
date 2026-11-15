@@ -75,16 +75,16 @@ def transform_environment(
 ) -> dict[str, str]:
     if request.param == "native":
         env = base_environment.copy()
-        if not env.get("DEFER_TEST_BINARY"):
+        if not env.get("RECAST_TEST_BINARY"):
             pytest.skip("native defer binary was not supplied")
     else:
         env = request.getfixturevalue("compiler_environment").copy()
-        env.pop("DEFER_TEST_BINARY", None)
+        env.pop("RECAST_TEST_BINARY", None)
     return env
 
 
 def tool_command(env: dict[str, str]) -> list[str]:
-    binary = env.get("DEFER_TEST_BINARY")
+    binary = env.get("RECAST_TEST_BINARY")
     return [binary] if binary else [sys.executable, str(TOOL)]
 
 
@@ -139,9 +139,9 @@ def test_python_batch_plan_uses_explicit_tool_source_root(tmp_path: Path) -> Non
     assert result.returncode == 0, result.stderr
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(plan_test C)\n'
-        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\n'
-        'set(DEFER_PYTHON_COMMAND "${CMAKE_COMMAND};-E;echo")\n'
-        'set(DEFER_LIBCLANG_PATH dummy)\nadd_library(recast-probe STATIC source.c)\n'
+        f'set(RECAST_TOOL_ROOT "{ROOT.as_posix()}")\n'
+        'set(RECAST_PYTHON_COMMAND "${CMAKE_COMMAND};-E;echo")\n'
+        'set(RECAST_LIBCLANG_PATH dummy)\nadd_library(recast-probe STATIC source.c)\n'
         f'include("{plan.as_posix()}")\n', encoding="utf-8"
     )
     result = subprocess.run([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={CLANG}"],
@@ -361,7 +361,7 @@ def test_stdin_matches_file_transformation(
 
 
 def test_native_stdin_with_preamble(tmp_path: Path, compiler_environment: dict[str, str]) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     if not binary:
         pytest.skip("native defer binary is required")
     command = [binary, "--filename", str(tmp_path / "virtual.c"), "--", "-std=c17"]
@@ -499,7 +499,7 @@ def test_batch_depfile_cannot_replace_any_source(
     )
     command = [*tool_command(transform_environment), "--batch", str(manifest),
                "--compilation-database", str(tmp_path), "--depfile", str(sources[1])]
-    if not transform_environment.get("DEFER_TEST_BINARY"):
+    if not transform_environment.get("RECAST_TEST_BINARY"):
         command.extend(["--libclang", transform_environment["LIBCLANG_LIBRARY_FILE"]])
     result = subprocess.run(command, capture_output=True, text=True, env=transform_environment, check=False)
     assert result.returncode != 0
@@ -508,7 +508,7 @@ def test_batch_depfile_cannot_replace_any_source(
 
 
 def test_incremental_cache_cannot_replace_source(tmp_path: Path, base_environment: dict[str, str]) -> None:
-    binary = base_environment.get("DEFER_TEST_BINARY")
+    binary = base_environment.get("RECAST_TEST_BINARY")
     if not binary:
         pytest.skip("native defer binary was not supplied")
     source = tmp_path / "generated.cache"
@@ -529,7 +529,7 @@ def test_incremental_cache_cannot_replace_source(tmp_path: Path, base_environmen
 def test_shared_cache_reuses_across_build_directories(
     tmp_path: Path, compiler_environment: dict[str, str], extension: str
 ) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     if not binary or CLANG is None:
         pytest.skip("native defer binary and Clang are required")
     source = tmp_path / f"source.{extension}"
@@ -605,7 +605,7 @@ def test_shared_cache_reuses_across_build_directories(
 
 
 def test_preamble_mode_matches_and_rejects_invalid_code(tmp_path: Path, compiler_environment: dict[str, str]) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     if not binary:
         pytest.skip("native defer binary was not supplied")
     source = tmp_path / "source.c"
@@ -631,7 +631,7 @@ def test_preamble_mode_matches_and_rejects_invalid_code(tmp_path: Path, compiler
 
 
 def test_cmake_shared_cache_across_build_directories(tmp_path: Path, compiler_environment: dict[str, str]) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     cmake = shutil.which("cmake")
     clangxx = shutil.which("clang++")
     if not binary or not cmake or not clangxx or not CLANG or not shutil.which("ninja"):
@@ -652,7 +652,7 @@ def test_cmake_shared_cache_across_build_directories(tmp_path: Path, compiler_en
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_cache C CXX)\n'
         'set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
+        f'set(RECAST_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
     )
     (source_dir / "CMakeLists.txt").write_text(
         'add_executable(recast-probe main.c other.cpp)\n'
@@ -661,11 +661,11 @@ def test_cmake_shared_cache_across_build_directories(tmp_path: Path, compiler_en
     )
     for name, expected in [("one", "transformed 1 of 1"), ("two", "transformed 0 of 1 files (1 restored")]:
         build = tmp_path / name
-        selected_binary = compiler_environment.get("DEFER_SECOND_BINARY", binary) if name == "two" else binary
+        selected_binary = compiler_environment.get("RECAST_SECOND_BINARY", binary) if name == "two" else binary
         configured = subprocess.run(
             [cmake, "-S", str(tmp_path), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={CLANG}",
-             f"-DCMAKE_CXX_COMPILER={clangxx}", f"-DDEFER_NATIVE_BINARY={selected_binary}",
-             f"-DDEFER_SHARED_CACHE={tmp_path / 'shared'}"],
+             f"-DCMAKE_CXX_COMPILER={clangxx}", f"-DRECAST_NATIVE_BINARY={selected_binary}",
+             f"-DRECAST_SHARED_CACHE={tmp_path / 'shared'}"],
             capture_output=True, text=True, env=compiler_environment, check=False,
         )
         assert configured.returncode == 0, configured.stdout + configured.stderr
@@ -678,7 +678,7 @@ def test_cmake_shared_cache_across_build_directories(tmp_path: Path, compiler_en
 
 
 def test_incremental_cache_tracks_each_compile_command(tmp_path: Path, compiler_environment: dict[str, str]) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     if not binary or not CLANG:
         pytest.skip("native defer binary and Clang are required")
     commands = []
@@ -813,7 +813,7 @@ def test_compilation_database_uses_musl_headers_and_runtime(
     tmp_path: Path, transform_environment: dict[str, str]
 ) -> None:
     musl = shutil.which("musl-gcc")
-    include = Path(os.environ.get("DEFER_TEST_MUSL_INCLUDE", "/usr/lib/musl/include"))
+    include = Path(os.environ.get("RECAST_TEST_MUSL_INCLUDE", "/usr/lib/musl/include"))
     if not musl or not CLANG or not (include / "stdio.h").is_file() or platform.machine().lower() not in ("x86_64", "amd64"):
         pytest.skip("x86-64, musl-gcc and musl headers are required")
     source, output = tmp_path / "input.c", tmp_path / "output.c"
@@ -843,7 +843,7 @@ def test_compilation_database_uses_musl_headers_and_runtime(
 def test_incremental_cache_invalidates_when_parser_target_changes(
     tmp_path: Path, base_environment: dict[str, str]
 ) -> None:
-    binary = base_environment.get("DEFER_TEST_BINARY")
+    binary = base_environment.get("RECAST_TEST_BINARY")
     if not binary or not CLANG:
         pytest.skip("native defer binary and Clang are required")
     source, output = tmp_path / "input.c", tmp_path / "generated" / "output.c"
@@ -1001,7 +1001,7 @@ def test_rejects_explicit_arguments_combined_with_database(
 
 
 def test_incremental_batch_tracks_per_file_arguments(tmp_path: Path, compiler_environment: dict[str, str]) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     if not binary:
         pytest.skip("native defer binary is required")
     manifest = tmp_path / "batch.txt"
@@ -1519,7 +1519,7 @@ def test_header_overlay_batch_tracks_dependencies(
 ) -> None:
     if not CLANG:
         pytest.skip("Clang is required")
-    native = bool(transform_environment.get("DEFER_TEST_BINARY"))
+    native = bool(transform_environment.get("RECAST_TEST_BINARY"))
     header = tmp_path / "header.h"
     header.write_text(
         '#include <defer.h>\n'
@@ -1622,7 +1622,7 @@ def test_header_overlay_batch_cannot_replace_other_source(tmp_path: Path, transf
     manifest = tmp_path / "batch.txt"
     manifest.write_text(f"{first}\t{tmp_path / 'generated' / 'first.c'}\n{other}\t{tmp_path / 'other' / 'other.c'}\n", encoding="utf-8")
     command = [*tool_command(transform_environment), "--batch", str(manifest), "--header-overlays"]
-    if not transform_environment.get("DEFER_TEST_BINARY"):
+    if not transform_environment.get("RECAST_TEST_BINARY"):
         command += ["--libclang", transform_environment["LIBCLANG_LIBRARY_FILE"], "--compilation-database", str(tmp_path), "--depfile", str(tmp_path / "batch.d")]
     result = subprocess.run(command, capture_output=True, text=True, env=transform_environment, check=False)
     assert result.returncode != 0
@@ -1631,7 +1631,7 @@ def test_header_overlay_batch_cannot_replace_other_source(tmp_path: Path, transf
 
 
 def test_header_overlay_native_and_python_outputs_match(tmp_path: Path, compiler_environment: dict[str, str]) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     if not binary:
         pytest.skip("native defer binary was not supplied")
     header = tmp_path / "header.h"
@@ -1665,7 +1665,7 @@ def test_header_overlay_native_and_python_outputs_match(tmp_path: Path, compiler
 def test_cmake_experimental_header_overlays_are_incremental(
     tmp_path: Path, compiler_environment: dict[str, str], backend: str, extension: str, mode: str
 ) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     cmake = shutil.which("cmake")
     clangxx = shutil.which("clang++")
     if not binary or not cmake or not clangxx or not CLANG or not shutil.which("ninja"):
@@ -1686,7 +1686,7 @@ def test_cmake_experimental_header_overlays_are_incremental(
     module = (ROOT / "Recast.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_header C CXX)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
+        f'set(RECAST_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
     )
     (src / "CMakeLists.txt").write_text(
         'add_executable(recast-probe main.c other.c)\n'
@@ -1702,9 +1702,9 @@ def test_cmake_experimental_header_overlays_are_incremental(
         return result.stdout + result.stderr
 
     run(cmake, "-S", str(tmp_path), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={CLANG}",
-        f"-DCMAKE_CXX_COMPILER={clangxx}", f"-DDEFER_NATIVE_BINARY={binary}",
-        f"-DDEFER_BACKEND={backend}", f"-DDEFER_LIBCLANG_PATH={compiler_environment['LIBCLANG_LIBRARY_FILE']}",
-        f"-DDEFER_HEADER_OVERLAYS={mode}")
+        f"-DCMAKE_CXX_COMPILER={clangxx}", f"-DRECAST_NATIVE_BINARY={binary}",
+        f"-DRECAST_BACKEND={backend}", f"-DRECAST_LIBCLANG_PATH={compiler_environment['LIBCLANG_LIBRARY_FILE']}",
+        f"-DRECAST_HEADER_OVERLAYS={mode}")
     first_build = run(cmake, "--build", str(build))
     if mode == "ON":
         assert "Transforming defer source batch" in first_build
@@ -1963,7 +1963,7 @@ def test_objc_fast_enumeration_cleanup(tmp_path: Path, transform_environment: di
 
 
 def test_objc_native_and_python_outputs_match(tmp_path: Path, compiler_environment: dict[str, str]) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     if not binary:
         pytest.skip("native defer binary was not supplied")
     source = tmp_path / "source.m"
@@ -1991,10 +1991,10 @@ def test_objc_runtime_cleanup(tmp_path: Path, transform_environment: dict[str, s
     resource_dir = subprocess.run([str(CLANG), "-print-resource-dir"], capture_output=True, text=True, check=True).stdout.strip()
     flags = ["-fobjc-exceptions", "-fblocks", "-I", str(ROOT / "include"), "-resource-dir", resource_dir]
     if sys.platform == "linux":
-        runtime_root = transform_environment.get("DEFER_TEST_OBJC2_ROOT")
+        runtime_root = transform_environment.get("RECAST_TEST_OBJC2_ROOT")
         if not runtime_root:
-            pytest.skip("set DEFER_TEST_OBJC2_ROOT to a GNUstep libobjc2 installation")
-        flags += ["-fobjc-runtime=gnustep-2.0", "-DDEFER_TEST_GNUSTEP_OBJC", "-I", str(Path(runtime_root) / "include")]
+            pytest.skip("set RECAST_TEST_OBJC2_ROOT to a GNUstep libobjc2 installation")
+        flags += ["-fobjc-runtime=gnustep-2.0", "-DRECAST_TEST_GNUSTEP_OBJC", "-I", str(Path(runtime_root) / "include")]
         link_flags = ["-L", str(Path(runtime_root) / "lib"), f"-Wl,-rpath,{Path(runtime_root) / 'lib'}", "-lobjc"]
     else:
         link_flags = ["-framework", "Foundation"]
@@ -2025,7 +2025,7 @@ def test_objc_runtime_cleanup(tmp_path: Path, transform_environment: dict[str, s
 @pytest.mark.parametrize("backend", ["NATIVE", "PYTHON"])
 @pytest.mark.parametrize("header_mode", [False, True])
 def test_cmake_objc_incremental(tmp_path: Path, compiler_environment: dict[str, str], backend: str, header_mode: bool) -> None:
-    binary = compiler_environment.get("DEFER_TEST_BINARY")
+    binary = compiler_environment.get("RECAST_TEST_BINARY")
     cmake = shutil.which("cmake")
     clangxx = shutil.which("clang++")
     if not binary or not cmake or not CLANG or not clangxx or not shutil.which("ninja"):
@@ -2043,7 +2043,7 @@ def test_cmake_objc_incremental(tmp_path: Path, compiler_environment: dict[str, 
     module = (ROOT / "Recast.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_objc C OBJC CXX)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
+        f'set(RECAST_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
     )
     (src / "CMakeLists.txt").write_text(
         'add_executable(recast-probe main.m)\n'
@@ -2059,8 +2059,8 @@ def test_cmake_objc_incremental(tmp_path: Path, compiler_environment: dict[str, 
 
     run(cmake, "-S", str(tmp_path), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={CLANG}",
         f"-DCMAKE_OBJC_COMPILER={CLANG}", f"-DCMAKE_CXX_COMPILER={clangxx}",
-        f"-DDEFER_NATIVE_BINARY={binary}", f"-DDEFER_BACKEND={backend}",
-        f"-DDEFER_LIBCLANG_PATH={compiler_environment['LIBCLANG_LIBRARY_FILE']}")
+        f"-DRECAST_NATIVE_BINARY={binary}", f"-DRECAST_BACKEND={backend}",
+        f"-DRECAST_LIBCLANG_PATH={compiler_environment['LIBCLANG_LIBRARY_FILE']}")
     assert "Transforming defer source batch" not in run(cmake, "--build", str(build))
     if header_mode:
         header.write_text('#include <defer.h>\n'
@@ -2407,10 +2407,10 @@ def test_uppercase_recast_defer_macros(
 ) -> None:
     source = (
         "#define DEFER(name, ...) do {} while (0)\n"
-        "#define DEFER_NAMED(name, ...) do {} while (0)\n"
-        "#define DEFER_CANCEL(name) do {} while (0)\n"
+        "#define RECAST_NAMED(name, ...) do {} while (0)\n"
+        "#define RECAST_CANCEL(name) do {} while (0)\n"
         "static int n; static void f(void) { DEFER(n += 1); "
-        "DEFER_NAMED(done, n += 2); DEFER_CANCEL(done); }\n"
+        "RECAST_NAMED(done, n += 2); RECAST_CANCEL(done); }\n"
         "int main(void) { f(); return n != 1; }\n"
     )
     result = transform(tmp_path, transform_environment, source)
@@ -2443,11 +2443,11 @@ def test_named_defer_rejects_unsafe_handles(
     assert not (tmp_path / "output.c").exists()
 
 
-@pytest.mark.parametrize("source", ["void f(void) { defer_named(h, (void)0); }", "void f(void) { defer_cancel(h); }", "void f(void) { USER_DEFER_WRAPPER(p); }"])
+@pytest.mark.parametrize("source", ["void f(void) { defer_named(h, (void)0); }", "void f(void) { defer_cancel(h); }", "void f(void) { USER_RECAST_WRAPPER(p); }"])
 def test_cmake_scanners_find_named_defer(
     tmp_path: Path, base_environment: dict[str, str], source: str
 ) -> None:
-    native_binary = base_environment.get("DEFER_TEST_BINARY")
+    native_binary = base_environment.get("RECAST_TEST_BINARY")
     if not native_binary:
         pytest.skip("native defer binary was not supplied")
     path = tmp_path / "input.c"
@@ -2488,8 +2488,8 @@ def test_named_defer_works_with_public_header(
 def test_deferred_safe_allocation_frees_on_early_return(
     tmp_path: Path, transform_environment: dict[str, str], allocator: str
 ) -> None:
-    allocation = ("SAFE_MALLOC_DEFER_FREE(p, sizeof(int) * 2, int *)" if allocator == "malloc"
-                  else "SAFE_CALLOC_DEFER_FREE(p, 2, sizeof(int), int *)")
+    allocation = ("SAFE_MALLOC_RECAST_FREE(p, sizeof(int) * 2, int *)" if allocator == "malloc"
+                  else "SAFE_CALLOC_RECAST_FREE(p, 2, sizeof(int), int *)")
     source = (
         'typedef __SIZE_TYPE__ size_t; extern void *malloc(size_t); extern void *calloc(size_t, size_t); '
         'extern void free(void *);\n#define NULL ((void *)0)\n'
@@ -2497,8 +2497,8 @@ def test_deferred_safe_allocation_frees_on_early_return(
         '#define SAFE_MALLOC(size, cast) ((cast)malloc(size))\n'
         '#define SAFE_CALLOC(count, size, cast) ((cast)calloc(count, size))\n'
         '#define SAFE_FREE(p) do { if (p) { ++releases; free(p); p = NULL; } } while (0)\n'
-        '#define SAFE_MALLOC_DEFER_FREE(name, size, cast) cast name = SAFE_MALLOC(size, cast); defer(SAFE_FREE(name))\n'
-        '#define SAFE_CALLOC_DEFER_FREE(name, count, size, cast) cast name = SAFE_CALLOC(count, size, cast); defer(SAFE_FREE(name))\n'
+        '#define SAFE_MALLOC_RECAST_FREE(name, size, cast) cast name = SAFE_MALLOC(size, cast); defer(SAFE_FREE(name))\n'
+        '#define SAFE_CALLOC_RECAST_FREE(name, count, size, cast) cast name = SAFE_CALLOC(count, size, cast); defer(SAFE_FREE(name))\n'
         'static int *transferred;\n'
         f'static int f(int early) {{ {allocation}; if (!p) return 1; if (early == 1) return 0; '
         'if (early == 2) { transferred = p; p = NULL; return 0; } p[0] = 7; return p[0] != 7; }\n'
@@ -2667,7 +2667,7 @@ def test_token_pasted_hidden_defer_fails_closed(
     assert not output.exists()
 
 
-@pytest.mark.parametrize("call", ["SAFE_MALLOC_DEFER_FREE(p, 4, char *)", "SAFE_CALLOC_DEFER_FREE(p, 1, 4, char *)"])
+@pytest.mark.parametrize("call", ["SAFE_MALLOC_RECAST_FREE(p, 4, char *)", "SAFE_CALLOC_RECAST_FREE(p, 1, 4, char *)"])
 def test_untransformed_deferred_allocation_fails_compilation(
     tmp_path: Path, compiler_environment: dict[str, str], call: str
 ) -> None:
@@ -2677,8 +2677,8 @@ def test_untransformed_deferred_allocation_fails_compilation(
         '#define SAFE_CALLOC(count, size, cast) ((cast)0)\n'
         '#include "defer.h"\n'
         '#define SAFE_FREE(p) ((void)(p))\n'
-        '#define SAFE_MALLOC_DEFER_FREE(name, size, cast) cast name = SAFE_MALLOC(size, cast); defer(SAFE_FREE(name))\n'
-        '#define SAFE_CALLOC_DEFER_FREE(name, count, size, cast) cast name = SAFE_CALLOC(count, size, cast); defer(SAFE_FREE(name))\n'
+        '#define SAFE_MALLOC_RECAST_FREE(name, size, cast) cast name = SAFE_MALLOC(size, cast); defer(SAFE_FREE(name))\n'
+        '#define SAFE_CALLOC_RECAST_FREE(name, count, size, cast) cast name = SAFE_CALLOC(count, size, cast); defer(SAFE_FREE(name))\n'
         f'void f(void) {{ {call}; (void)p; }}\n', encoding="utf-8",
     )
     result = subprocess.run(
@@ -2697,8 +2697,8 @@ def test_deferred_allocation_rejects_shadowed_pointer(
         '#define NULL ((void *)0)\n'
         '#define SAFE_MALLOC(size, cast) ((cast)malloc(size))\n'
         '#define SAFE_FREE(p) do { free(p); (p) = NULL; } while (0)\n'
-        '#define SAFE_MALLOC_DEFER_FREE(name, size, cast) cast name = SAFE_MALLOC(size, cast); defer(SAFE_FREE(name))\n'
-        'void f(void) { SAFE_MALLOC_DEFER_FREE(p, 4, char *); { char *p = NULL; (void)p; return; } }\n'
+        '#define SAFE_MALLOC_RECAST_FREE(name, size, cast) cast name = SAFE_MALLOC(size, cast); defer(SAFE_FREE(name))\n'
+        'void f(void) { SAFE_MALLOC_RECAST_FREE(p, 4, char *); { char *p = NULL; (void)p; return; } }\n'
     )
     result = transform(tmp_path, transform_environment, source)
     assert result.returncode != 0
@@ -2913,10 +2913,10 @@ def test_cmake_discovers_defer_and_tracks_headers(
         '#define SAFE_CALLOC(count, size, cast) ((cast)calloc(count, size))\n'
         '#define SAFE_FREE(p) do { free(p); (p) = NULL; } while (0)\n'
         '#include "defer.h"\n'
-        '#define SAFE_MALLOC_DEFER_FREE(name, size, cast) cast name = SAFE_MALLOC(size, cast); defer(SAFE_FREE(name))\n'
-        '#define SAFE_CALLOC_DEFER_FREE(name, count, size, cast) cast name = SAFE_CALLOC(count, size, cast); defer(SAFE_FREE(name))\n'
-        'int allocated(void) { SAFE_MALLOC_DEFER_FREE(p, 4, char *); '
-        'SAFE_CALLOC_DEFER_FREE(q, 2, 4, char *); return p == NULL || q == NULL; }\n',
+        '#define SAFE_MALLOC_RECAST_FREE(name, size, cast) cast name = SAFE_MALLOC(size, cast); defer(SAFE_FREE(name))\n'
+        '#define SAFE_CALLOC_RECAST_FREE(name, count, size, cast) cast name = SAFE_CALLOC(count, size, cast); defer(SAFE_FREE(name))\n'
+        'int allocated(void) { SAFE_MALLOC_RECAST_FREE(p, 4, char *); '
+        'SAFE_CALLOC_RECAST_FREE(q, 2, 4, char *); return p == NULL || q == NULL; }\n',
         encoding="utf-8",
     )
     (source_dir / "wrappers.h").write_text(
@@ -2971,8 +2971,8 @@ def test_cmake_discovers_defer_and_tracks_headers(
         'COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/ready.in" "${CMAKE_BINARY_DIR}/ready.h" '
         'DEPENDS "${CMAKE_SOURCE_DIR}/ready.in")\n'
         'add_custom_target(generate_version DEPENDS "${CMAKE_BINARY_DIR}/ready.h")\n'
-        'set(DEFER_PYTHON3_EXECUTABLE "python-must-not-run")\n'
-        f'set(DEFER_TOOL_ROOT "{tool_root.as_posix()}")\ninclude("{module}")\n'
+        'set(RECAST_PYTHON3_EXECUTABLE "python-must-not-run")\n'
+        f'set(RECAST_TOOL_ROOT "{tool_root.as_posix()}")\ninclude("{module}")\n'
         "add_subdirectory(src)\n"
         "recast_targets(recast-probe)\n",
         encoding="utf-8",
@@ -3004,11 +3004,11 @@ def test_cmake_discovers_defer_and_tracks_headers(
         "Ninja",
         f"-DCMAKE_C_COMPILER={CLANG}",
         f"-DCMAKE_CXX_COMPILER={clangxx}",
-        f"-DDEFER_BACKEND={'PYTHON' if backend == 'PYTHON' else 'NATIVE'}",
-        f"-DDEFER_LIBCLANG_PATH={compiler_environment['LIBCLANG_LIBRARY_FILE']}",
-        f"-DDEFER_WRAPPER_HEADER_DIRS={external}",
-        f"-DDEFER_NATIVE_BINARY={compiler_environment.get('DEFER_TEST_BINARY', '')}",
-        f"-DDEFER_PYTHON_COMMAND={sys.executable}",
+        f"-DRECAST_BACKEND={'PYTHON' if backend == 'PYTHON' else 'NATIVE'}",
+        f"-DRECAST_LIBCLANG_PATH={compiler_environment['LIBCLANG_LIBRARY_FILE']}",
+        f"-DRECAST_WRAPPER_HEADER_DIRS={external}",
+        f"-DRECAST_NATIVE_BINARY={compiler_environment.get('RECAST_TEST_BINARY', '')}",
+        f"-DRECAST_PYTHON_COMMAND={sys.executable}",
     ]
     if backend == "NATIVE_CROSS":
         system = {"win32": "Windows", "darwin": "Darwin"}.get(sys.platform, "Linux")

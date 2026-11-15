@@ -224,9 +224,9 @@ bool metadata(const std::filesystem::path &path, FileMetadata &result) {
 
 std::string cache_context(const char *program) {
   std::string context = "defer-cache-v2\n";
-#ifdef DEFER_BUILD_ID
+#ifdef RECAST_BUILD_ID
   (void)program;
-  context += DEFER_BUILD_ID "\n";
+  context += RECAST_BUILD_ID "\n";
 #else
   try {
     context += digest(defer_tool::read_file(std::filesystem::u8path(program))) + "\n";
@@ -313,6 +313,11 @@ int main(int argc, char **argv) {
     while (std::getline(transform_list, transform_name, ',')) {
       if (transform_name.empty())
         throw std::runtime_error("--transforms contains an empty transformation name");
+      if (transform_name == "all") {
+        enabled_transforms.insert("defer");
+        enabled_transforms.insert("closures");
+        continue;
+      }
       if (transform_name != "defer" && transform_name != "closures")
         throw std::runtime_error("unknown transformation pass: " + transform_name);
       enabled_transforms.insert(transform_name);

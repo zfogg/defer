@@ -73,9 +73,9 @@ def configure_llvm(work: Path, source: Path, jobs: int) -> Path:
             "-DLLVM_ENABLE_CURL=OFF"]
     if windows:
         args += ["-DLLVM_ENABLE_PIC=OFF", "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded", "-DLLVM_USE_CRT_RELEASE=MT"]
-        if os.environ.get("DEFER_COMPILER_TARGET"):
-            args += [f"-DCMAKE_C_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}",
-                     f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}"]
+        if os.environ.get("RECAST_COMPILER_TARGET"):
+            args += [f"-DCMAKE_C_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}",
+                     f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}"]
     run(*args)
     run("cmake", "--build", build, "--target", "libclang" if windows else "libclang_static", "--parallel", jobs)
     return build
@@ -172,8 +172,8 @@ endforeach()
     configure = ["cmake", "-S", source, "-B", build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
                  "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
                  f"-DCMAKE_CXX_COMPILER={cxx}", f"-DSDK_ROOT={stage}"]
-    if sys.platform == "win32" and os.environ.get("DEFER_COMPILER_TARGET"):
-        configure.append(f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}")
+    if sys.platform == "win32" and os.environ.get("RECAST_COMPILER_TARGET"):
+        configure.append(f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}")
     run(*configure)
     run("cmake", "--build", build)
     if sys.platform == "win32":
@@ -201,11 +201,11 @@ def main() -> None:
     compiler = "clang-cl" if sys.platform == "win32" else "/usr/bin/clang" if sys.platform == "darwin" else "clang"
     cxx = "clang-cl" if sys.platform == "win32" else "/usr/bin/clang++" if sys.platform == "darwin" else "clang++"
     configure = ["cmake", "-S", ROOT, "-B", build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
-        f"-DCMAKE_C_COMPILER={compiler}", f"-DCMAKE_CXX_COMPILER={cxx}", f"-DDEFER_LLVM_DEV_ROOT={llvm}",
-        "-DDEFER_STATIC_LIBCLANG=ON", f"-DDEFER_FULLY_STATIC_EXECUTABLE={'ON' if args.musl else 'OFF'}"]
-    if sys.platform == "win32" and os.environ.get("DEFER_COMPILER_TARGET"):
-        configure += [f"-DCMAKE_C_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}",
-                      f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}"]
+        f"-DCMAKE_C_COMPILER={compiler}", f"-DCMAKE_CXX_COMPILER={cxx}", f"-DRECAST_LLVM_DEV_ROOT={llvm}",
+        "-DRECAST_STATIC_LIBCLANG=ON", f"-DRECAST_FULLY_STATIC_EXECUTABLE={'ON' if args.musl else 'OFF'}"]
+    if sys.platform == "win32" and os.environ.get("RECAST_COMPILER_TARGET"):
+        configure += [f"-DCMAKE_C_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}",
+                      f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}"]
     run(*configure)
     run("cmake", "--build", build, "--parallel", args.jobs)
     run("ctest", "--test-dir", build, "--output-on-failure")
@@ -229,17 +229,17 @@ def main() -> None:
     output = work / "hello.c"
     run(binary, ROOT / "examples/hello_world/main.c", output, "--", f"-I{stage / 'include'}")
     executable = work / ("hello.exe" if sys.platform == "win32" else "hello")
-    target_flag = [f"--target={os.environ['DEFER_COMPILER_TARGET']}"] if os.environ.get("DEFER_COMPILER_TARGET") else []
+    target_flag = [f"--target={os.environ['RECAST_COMPILER_TARGET']}"] if os.environ.get("RECAST_COMPILER_TARGET") else []
     direct_compiler = "/usr/bin/clang" if sys.platform == "darwin" else "clang"
     run(direct_compiler, *target_flag, output, f"-I{stage / 'include'}", "-o", executable)
     if subprocess.check_output([executable], text=True).splitlines() != ["hello", "goodbye"]:
         raise RuntimeError("hello-world output was incorrect")
     example_build = work / "example-build"
     example_configure = ["cmake", "-S", ROOT / "examples/hello_world_cmake", "-B", example_build, "-G", "Ninja",
-        f"-DCMAKE_C_COMPILER={compiler}", f"-DDEFER_MODULE={generated}", f"-DDEFER_TOOL={binary}",
-        f"-DDEFER_INCLUDE_DIR={stage / 'include'}"]
-    if os.environ.get("DEFER_COMPILER_TARGET"):
-        example_configure.append(f"-DCMAKE_C_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}")
+        f"-DCMAKE_C_COMPILER={compiler}", f"-DRECAST_MODULE={generated}", f"-DRECAST_TOOL={binary}",
+        f"-DRECAST_INCLUDE_DIR={stage / 'include'}"]
+    if os.environ.get("RECAST_COMPILER_TARGET"):
+        example_configure.append(f"-DCMAKE_C_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}")
     run(*example_configure)
     run("cmake", "--build", example_build)
     run(example_build / ("hello.exe" if sys.platform == "win32" else "hello"))

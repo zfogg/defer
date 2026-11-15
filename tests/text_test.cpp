@@ -16,7 +16,7 @@ int main() {
   CHECK(may_contain_defer("defer /* comment (x) */ (cleanup());"));
   CHECK(may_contain_defer("defer_named(handle, cleanup());"));
   CHECK(may_contain_defer("defer_cancel(handle);"));
-  CHECK(may_contain_defer("USER_DEFER_WRAPPER(p);"));
+  CHECK(may_contain_defer("USER_RECAST_WRAPPER(p);"));
   CHECK(may_contain_defer("defer // comment\n(cleanup());"));
   CHECK(may_contain_defer("defer \\\n(cleanup());"));
   CHECK(!may_contain_defer("not_defer(x); deferred(x);"));

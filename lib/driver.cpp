@@ -424,7 +424,7 @@ std::string read_file(const fs::path &path) {
 }
 
 fs::path loaded_libclang_path() {
-#ifdef DEFER_STATIC_LIBCLANG
+#ifdef RECAST_STATIC_LIBCLANG
   // Static libclang has no shared-library pathname. The executable contains
   // its implementation and is a suitable identity for incremental caches.
   auto executable = llvm::sys::fs::getMainExecutable(nullptr, reinterpret_cast<void *>(&loaded_libclang_path));
@@ -455,7 +455,7 @@ fs::path loaded_libclang_path() {
 }
 
 void verify_libclang(const fs::path &requested) {
-#ifdef DEFER_STATIC_LIBCLANG
+#ifdef RECAST_STATIC_LIBCLANG
   (void)requested;
   throw std::runtime_error("--libclang cannot select a shared library in a statically linked executable");
 #else

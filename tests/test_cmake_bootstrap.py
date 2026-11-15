@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.parametrize("backend", ["NATIVE", "PYTHON"])
 def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend: str) -> None:
-    binary = os.environ.get("DEFER_TEST_BINARY")
+    binary = os.environ.get("RECAST_TEST_BINARY")
     toolchain = os.environ.get("EMSCRIPTEN_TOOLCHAIN_FILE")
     libclang = os.environ.get("LIBCLANG_LIBRARY_FILE")
     cmake, ninja = (shutil.which(name) for name in ("cmake", "ninja"))
@@ -41,8 +41,8 @@ def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend
     build = tmp_path / "build"
     env = {**os.environ, "EM_CACHE": str(tmp_path / "emsdk cache")}
     for args in ([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja", f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
-                  f"-DDEFER_NATIVE_BINARY={binary}", f"-DDEFER_BACKEND={backend}", f"-DDEFER_TOOL_ROOT={ROOT}",
-                  f"-DDEFER_PYTHON_COMMAND={sys.executable}", f"-DDEFER_LIBCLANG_PATH={libclang or ''}"],
+                  f"-DRECAST_NATIVE_BINARY={binary}", f"-DRECAST_BACKEND={backend}", f"-DRECAST_TOOL_ROOT={ROOT}",
+                  f"-DRECAST_PYTHON_COMMAND={sys.executable}", f"-DRECAST_LIBCLANG_PATH={libclang or ''}"],
                  [cmake, "--build", str(build)]):
         result = subprocess.run(args, capture_output=True, text=True, env=env, check=False, timeout=180)
         assert result.returncode == 0, result.stdout + result.stderr
@@ -60,9 +60,9 @@ def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend
 
 
 def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) -> None:
-    binary = os.environ.get("DEFER_TEST_BINARY")
+    binary = os.environ.get("RECAST_TEST_BINARY")
     cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", "clang"))
-    include = Path(os.environ.get("DEFER_TEST_MUSL_INCLUDE", "/usr/lib/musl/include"))
+    include = Path(os.environ.get("RECAST_TEST_MUSL_INCLUDE", "/usr/lib/musl/include"))
     if (not all((binary, cmake, ninja, clang)) or not (include / "stdio.h").is_file()
             or platform.machine().lower() not in ("x86_64", "amd64")):
         pytest.skip("native defer binary, Clang, CMake, Ninja, and x86-64 musl headers are required")
@@ -82,7 +82,7 @@ def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) ->
     build = tmp_path / "build"
     for args in ([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={clang}",
                   f"-DCMAKE_C_FLAGS=--target=x86_64-unknown-linux-musl -I{include}",
-                  "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY", f"-DDEFER_NATIVE_BINARY={binary}"],
+                  "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY", f"-DRECAST_NATIVE_BINARY={binary}"],
                  [cmake, "--build", str(build)]):
         result = subprocess.run(args, capture_output=True, text=True, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
@@ -93,7 +93,7 @@ def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) ->
 
 @pytest.mark.parametrize("backend", ["NATIVE", "PYTHON"])
 def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path, backend: str) -> None:
-    binary = os.environ.get("DEFER_TEST_BINARY")
+    binary = os.environ.get("RECAST_TEST_BINARY")
     cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", "clang"))
     if not all((binary, cmake, ninja, clang)):
         pytest.skip("native defer binary, CMake, Ninja and Clang are required")
@@ -118,13 +118,13 @@ def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path, bac
         '    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${source}" "${generated}" DEPENDS "${source}")\n'
         '  set(${out} "${generated}" PARENT_SCOPE)\nendfunction()\n'
         f'add_executable(probe main.c other.c)\ntarget_include_directories(probe PRIVATE "{(ROOT / "include").as_posix()}")\n'
-        'set(DEFER_SOURCE_HOOK preprocess)\nrecast_target(probe)\n', encoding="utf-8"
+        'set(RECAST_SOURCE_HOOK preprocess)\nrecast_target(probe)\n', encoding="utf-8"
     )
     build = tmp_path / "build"
     for args in ([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja",
-                  f"-DCMAKE_C_COMPILER={clang}", f"-DDEFER_NATIVE_BINARY={binary}", f"-DDEFER_BACKEND={backend}",
-                  f"-DDEFER_TOOL_ROOT={ROOT}", f"-DDEFER_PYTHON_COMMAND={sys.executable}",
-                  f"-DDEFER_LIBCLANG_PATH={libclang or ''}"],
+                  f"-DCMAKE_C_COMPILER={clang}", f"-DRECAST_NATIVE_BINARY={binary}", f"-DRECAST_BACKEND={backend}",
+                  f"-DRECAST_TOOL_ROOT={ROOT}", f"-DRECAST_PYTHON_COMMAND={sys.executable}",
+                  f"-DRECAST_LIBCLANG_PATH={libclang or ''}"],
                  [cmake, "--build", str(build)]):
         result = subprocess.run(args, capture_output=True, text=True, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
@@ -140,7 +140,7 @@ def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path, bac
 
 @pytest.mark.parametrize("compiler_name", ["clang", "clang-cl"])
 def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, compiler_name: str) -> None:
-    binary = os.environ.get("DEFER_TEST_BINARY")
+    binary = os.environ.get("RECAST_TEST_BINARY")
     if compiler_name == "clang-cl" and (sys.platform != "win32" or not os.environ.get("INCLUDE")):
         pytest.skip("clang-cl requires a Windows developer environment")
     cmake, ninja, clang = (shutil.which(name) for name in ("cmake", "ninja", compiler_name))
@@ -171,7 +171,7 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, c
         'if(CMAKE_HOST_WIN32)\n set(tool "${root}/bin/recast.exe")\nelse()\n set(tool "${root}/bin/recast")\nendif()\n'
         'if(NOT EXISTS "${tool}")\n file(ARCHIVE_EXTRACT INPUT "${root}/defer.zip" DESTINATION "${root}")\nendif()\n'
         'execute_process(COMMAND "${tool}" cmake-config --write-file "${root}/Recast.cmake" COMMAND_ERROR_IS_FATAL ANY)\n'
-        'set(DEFER_NATIVE_BINARY "${tool}")\ninclude("${root}/Recast.cmake")\n'
+        'set(RECAST_NATIVE_BINARY "${tool}")\ninclude("${root}/Recast.cmake")\n'
         'add_executable(consumer main.c)\ntarget_include_directories(consumer PRIVATE "${root}/include")\n'
         'recast_targets(consumer)\n', encoding="utf-8"
     )
