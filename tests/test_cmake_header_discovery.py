@@ -25,7 +25,7 @@ def test_discovery_tracks_included_objc_files(tmp_path: Path, extension: str) ->
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(scan LANGUAGES NONE)\n'
         f'include("{module}")\nset(_batch_stage test)\n'
-        'defer_scan_targets(selected)\nget_property(wrappers GLOBAL PROPERTY DEFER_WRAPPER_NAMES)\n'
+        'recast_scan_targets(selected)\nget_property(wrappers GLOBAL PROPERTY DEFER_WRAPPER_NAMES)\n'
         'file(WRITE "${CMAKE_BINARY_DIR}/result.txt" "${wrappers}")\n',
         encoding="utf-8",
     )
@@ -68,7 +68,7 @@ def test_discovery_prunes_environments_and_keeps_explicit_roots(tmp_path: Path) 
         'set(DEFER_SOURCE_ROOT "${CMAKE_SOURCE_DIR}")\nset(DEFER_SOURCE_DIRS src CACHE STRING "")\n'
         f'set(DEFER_WRAPPER_HEADER_DIRS "{external.as_posix()};{build.as_posix()}" CACHE STRING "")\n'
         f'include("{module}")\nset(_batch_stage test)\n'
-        "defer_scan_targets(selected)\n"
+        "recast_scan_targets(selected)\n"
         "get_property(wrappers GLOBAL PROPERTY DEFER_WRAPPER_NAMES)\n"
         "get_property(overlays GLOBAL PROPERTY DEFER_HEADER_ACTIVE)\n"
         'file(WRITE "${CMAKE_BINARY_DIR}/scan-result.txt" "${wrappers}|${overlays}")\n',

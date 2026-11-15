@@ -130,7 +130,7 @@ def test_python_batch_plan_uses_explicit_tool_source_root(tmp_path: Path) -> Non
     source.write_text('void f(void) {}\n', encoding="utf-8")
     build = tmp_path / "build"
     records = tmp_path / "records.txt"
-    records.write_text(f"defer-probe\t{source}\t{build / 'generated.c'}\t\n", encoding="utf-8")
+    records.write_text(f"recast-probe\t{source}\t{build / 'generated.c'}\t\n", encoding="utf-8")
     plan = tmp_path / "plan.cmake"
     result = subprocess.run(
         [sys.executable, str(TOOL.parent / "plan.py"), "--records", str(records), "--build-dir", str(build),
@@ -141,7 +141,7 @@ def test_python_batch_plan_uses_explicit_tool_source_root(tmp_path: Path) -> Non
         'cmake_minimum_required(VERSION 3.25)\nproject(plan_test C)\n'
         f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\n'
         'set(DEFER_PYTHON_COMMAND "${CMAKE_COMMAND};-E;echo")\n'
-        'set(DEFER_LIBCLANG_PATH dummy)\nadd_library(defer-probe STATIC source.c)\n'
+        'set(DEFER_LIBCLANG_PATH dummy)\nadd_library(recast-probe STATIC source.c)\n'
         f'include("{plan.as_posix()}")\n', encoding="utf-8"
     )
     result = subprocess.run([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja", f"-DCMAKE_C_COMPILER={CLANG}"],
@@ -652,11 +652,11 @@ def test_cmake_shared_cache_across_build_directories(tmp_path: Path, compiler_en
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_cache C CXX)\n'
         'set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\ndefer_targets(defer-probe)\n', encoding="utf-8"
+        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
     )
     (source_dir / "CMakeLists.txt").write_text(
-        'add_executable(defer-probe main.c other.cpp)\n'
-        f'target_include_directories(defer-probe PRIVATE "{(ROOT / "include").as_posix()}")\n',
+        'add_executable(recast-probe main.c other.cpp)\n'
+        f'target_include_directories(recast-probe PRIVATE "{(ROOT / "include").as_posix()}")\n',
         encoding="utf-8",
     )
     for name, expected in [("one", "transformed 1 of 1"), ("two", "transformed 0 of 1 files (1 restored")]:
@@ -673,7 +673,7 @@ def test_cmake_shared_cache_across_build_directories(tmp_path: Path, compiler_en
                                env=compiler_environment, check=False)
         assert built.returncode == 0, built.stdout + built.stderr
         assert expected in built.stdout + built.stderr
-        exe = build / "src" / ("defer-probe.exe" if sys.platform == "win32" else "defer-probe")
+        exe = build / "src" / ("recast-probe.exe" if sys.platform == "win32" else "recast-probe")
         assert subprocess.run([str(exe)], check=False).returncode == 0
 
 
@@ -1686,13 +1686,13 @@ def test_cmake_experimental_header_overlays_are_incremental(
     module = (ROOT / "Recast.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_header C CXX)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\ndefer_targets(defer-probe)\n', encoding="utf-8"
+        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
     )
     (src / "CMakeLists.txt").write_text(
-        'add_executable(defer-probe main.c other.c)\n'
-        + (f'target_precompile_headers(defer-probe PRIVATE "${{CMAKE_CURRENT_SOURCE_DIR}}/{header.name}")\n' if mode == "ON" else "")
+        'add_executable(recast-probe main.c other.c)\n'
+        + (f'target_precompile_headers(recast-probe PRIVATE "${{CMAKE_CURRENT_SOURCE_DIR}}/{header.name}")\n' if mode == "ON" else "")
         +
-        f'target_include_directories(defer-probe PRIVATE "{(ROOT / "include").as_posix()}")\n', encoding="utf-8"
+        f'target_include_directories(recast-probe PRIVATE "{(ROOT / "include").as_posix()}")\n', encoding="utf-8"
     )
     build = tmp_path / "out"
 
@@ -1712,7 +1712,7 @@ def test_cmake_experimental_header_overlays_are_incremental(
         assert "Transforming defer source batch" not in first_build
     if backend == "NATIVE" and mode == "ON":
         assert "transformed 2 of 2" in first_build
-    executable = build / "src" / ("defer-probe.exe" if sys.platform == "win32" else "defer-probe")
+    executable = build / "src" / ("recast-probe.exe" if sys.platform == "win32" else "recast-probe")
     run(str(executable))
     objects = list((build / "src" / "CMakeFiles").rglob("*.obj" if sys.platform == "win32" else "*.o"))
     main_obj = next(path for path in objects if "main.c" in path.name)
@@ -1728,8 +1728,8 @@ def test_cmake_experimental_header_overlays_are_incremental(
     if mode == "AUTO":
         assert "Re-running CMake" in output
         objects = list((build / "src" / "CMakeFiles").rglob("*.obj" if sys.platform == "win32" else "*.o"))
-        main_obj = next(path for path in objects if "defer_transformed" in str(path) and "main.c" in path.name)
-        other_obj = next(path for path in objects if "defer_transformed" in str(path) and "other.c" in path.name)
+        main_obj = next(path for path in objects if "recast_transformed" in str(path) and "main.c" in path.name)
+        other_obj = next(path for path in objects if "recast_transformed" in str(path) and "other.c" in path.name)
         main_mtime = main_obj.stat().st_mtime_ns
         other_mtime = other_obj.stat().st_mtime_ns
         time.sleep(1.1)
@@ -1766,7 +1766,7 @@ def test_cmake_header_detection_ignores_non_code(tmp_path: Path, contents: str, 
     script.write_text(
         f'include("{module}")\nfile(READ "{header.as_posix()}" text)\n'
         'string(REGEX REPLACE "\\\\\\\\\\n" "" text "${text}")\n'
-        'set(wrappers defer WRAPPED)\ndefer_header_has_code(found text wrappers)\nmessage("found=${found}")\n',
+        'set(wrappers defer WRAPPED)\nrecast_header_has_code(found text wrappers)\nmessage("found=${found}")\n',
         encoding="utf-8",
     )
     result = subprocess.run([cmake, "-P", str(script)], cwd=tmp_path, capture_output=True, text=True, check=False)
@@ -2043,12 +2043,12 @@ def test_cmake_objc_incremental(tmp_path: Path, compiler_environment: dict[str, 
     module = (ROOT / "Recast.cmake").as_posix()
     (tmp_path / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.30)\nproject(defer_objc C OBJC CXX)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\ndefer_targets(defer-probe)\n', encoding="utf-8"
+        f'set(DEFER_TOOL_ROOT "{ROOT.as_posix()}")\ninclude("{module}")\nadd_subdirectory(src)\nrecast_targets(recast-probe)\n', encoding="utf-8"
     )
     (src / "CMakeLists.txt").write_text(
-        'add_executable(defer-probe main.m)\n'
-        f'target_include_directories(defer-probe PRIVATE "{(ROOT / "include").as_posix()}")\n'
-        'target_link_libraries(defer-probe PRIVATE "-framework Foundation")\n', encoding="utf-8"
+        'add_executable(recast-probe main.m)\n'
+        f'target_include_directories(recast-probe PRIVATE "{(ROOT / "include").as_posix()}")\n'
+        'target_link_libraries(recast-probe PRIVATE "-framework Foundation")\n', encoding="utf-8"
     )
     build = tmp_path / "out"
 
@@ -2073,7 +2073,7 @@ def test_cmake_objc_incremental(tmp_path: Path, compiler_environment: dict[str, 
         )
     output = run(cmake, "--build", str(build))
     assert "Transforming defer source batch" in output
-    run(str(build / "src" / "defer-probe"))
+    run(str(build / "src" / "recast-probe"))
     assert "Transforming defer source batch" not in run(cmake, "--build", str(build))
 
 
@@ -2812,7 +2812,7 @@ def test_unsupported_control_flow_fails_closed(
     result = transform(tmp_path, transform_environment, source)
     assert result.returncode != 0
     assert not (tmp_path / "output.c").exists()
-    assert "defer-tool:" in result.stderr
+    assert "recast-tool:" in result.stderr
 
 
 def test_untransformed_defer_fails_compilation(
@@ -2974,15 +2974,15 @@ def test_cmake_discovers_defer_and_tracks_headers(
         'set(DEFER_PYTHON3_EXECUTABLE "python-must-not-run")\n'
         f'set(DEFER_TOOL_ROOT "{tool_root.as_posix()}")\ninclude("{module}")\n'
         "add_subdirectory(src)\n"
-        "defer_targets(defer-probe)\n",
+        "recast_targets(recast-probe)\n",
         encoding="utf-8",
     )
     (source_dir / "CMakeLists.txt").write_text(
-        "add_executable(defer-probe main.c second.c named.c allocated.c wrapped.c object.c external.c late.c)\n"
+        "add_executable(recast-probe main.c second.c named.c allocated.c wrapped.c object.c external.c late.c)\n"
         "set_source_files_properties(second.c PROPERTIES COMPILE_DEFINITIONS SECOND_REQUIRED)\n"
-        "set_target_properties(defer-probe PROPERTIES UNITY_BUILD ON)\n"
-        "add_dependencies(defer-probe generate_version)\n"
-        f'target_include_directories(defer-probe PRIVATE "{include_dir}" "{external.as_posix()}" "${{CMAKE_BINARY_DIR}}")\n',
+        "set_target_properties(recast-probe PROPERTIES UNITY_BUILD ON)\n"
+        "add_dependencies(recast-probe generate_version)\n"
+        f'target_include_directories(recast-probe PRIVATE "{include_dir}" "{external.as_posix()}" "${{CMAKE_BINARY_DIR}}")\n',
         encoding="utf-8",
     )
     build = project / "out"
@@ -3048,10 +3048,10 @@ def test_cmake_discovers_defer_and_tracks_headers(
     output = run(cmake, "--build", str(build))
     assert "Re-running CMake" in output
     assert "Transforming defer source batch" in output
-    executable = build / "src" / ("defer-probe.exe" if sys.platform == "win32" else "defer-probe")
+    executable = build / "src" / ("recast-probe.exe" if sys.platform == "win32" else "recast-probe")
     run(str(executable))
     assert second_object.stat().st_mtime_ns == second_mtime
-    generated_main = build / "defer_transformed" / "defer-probe" / "src" / "main.c.defer" / "main.c"
+    generated_main = build / "recast_transformed" / "recast-probe" / "src" / "main.c.defer" / "main.c"
     assert generated_main.is_file()
     main_objects = list(build.rglob("*main.c.obj")) + list(build.rglob("*main.c.o"))
     assert len(main_objects) == 1
@@ -3066,7 +3066,7 @@ def test_cmake_discovers_defer_and_tracks_headers(
     assert second_object.stat().st_mtime_ns == second_mtime
     assert main_object.stat().st_mtime_ns > main_mtime
     if backend != "PYTHON":
-        assert "defer-tool: transformed 1 of " in output
+        assert "recast-tool: transformed 1 of " in output
     run(str(executable))
     output = run(cmake, "--build", str(build))
     assert "Re-running CMake" not in output
@@ -3077,7 +3077,7 @@ def test_cmake_discovers_defer_and_tracks_headers(
         time.sleep(1.1)
         database.write_text(database.read_text(encoding="utf-8") + "\n", encoding="utf-8")
         output = run(cmake, "--build", str(build))
-        assert "defer-tool: transformed 0 of " in output
+        assert "recast-tool: transformed 0 of " in output
         assert second_object.stat().st_mtime_ns == second_mtime
     time.sleep(1.1)
     main.write_text("int main(void) { return 0; }\n", encoding="utf-8")
@@ -3094,31 +3094,31 @@ def test_cmake_discovers_defer_and_tracks_headers(
         "int main(void) { f(); return n != included_value() || included_cpp() || included_m() || included_mm(); }\n",
         encoding="utf-8",
     )
-    collision = build / "defer_transformed" / "defer-probe" / "src" / "included.c"
+    collision = build / "recast_transformed" / "recast-probe" / "src" / "included.c"
     collision.parent.mkdir(parents=True, exist_ok=True)
     collision.write_text('#error generated-directory include shadowed the source file\n', encoding="utf-8")
     (build / "ready.h").unlink()
     output = run(cmake, "--build", str(build))
     assert output.count("Transforming defer source batch") == 1
     assert (
-        build / "defer_transformed" / "defer-probe" / "src" / "second.c.defer" / "second.c"
+        build / "recast_transformed" / "recast-probe" / "src" / "second.c.defer" / "second.c"
     ).is_file()
-    assert (build / "defer_transformed" / "defer-probe" / "src" / "late.c.defer" / "late.c").is_file()
-    generated = build / "defer_transformed" / "defer-probe" / "src" / "main.c.defer" / "main.c"
+    assert (build / "recast_transformed" / "recast-probe" / "src" / "late.c.defer" / "late.c").is_file()
+    generated = build / "recast_transformed" / "recast-probe" / "src" / "main.c.defer" / "main.c"
     assert generated.is_file()
     assert "defer\n (n = VALUE)" in main.read_text(encoding="utf-8")
     assert "defer\n (n = VALUE)" not in generated.read_text(encoding="utf-8")
     executable = (
         build
         / "src"
-        / ("defer-probe.exe" if sys.platform == "win32" else "defer-probe")
+        / ("recast-probe.exe" if sys.platform == "win32" else "recast-probe")
     )
     run(str(executable))
     other_generated = (
-        build / "defer_transformed" / "defer-probe" / "src" / "second.c.defer" / "second.c"
+        build / "recast_transformed" / "recast-probe" / "src" / "second.c.defer" / "second.c"
     )
     objects = list(
-        (build / "src" / "CMakeFiles" / "defer-probe.dir").rglob(
+        (build / "src" / "CMakeFiles" / "recast-probe.dir").rglob(
             "*.obj" if sys.platform == "win32" else "*.o"
         )
     )
@@ -3151,7 +3151,7 @@ def test_cmake_discovers_defer_and_tracks_headers(
     main.write_text(original_main + "\nvoid invalid(void) { defer(return); }\n", encoding="utf-8")
     failed = subprocess.run([cmake, "--build", str(build)], capture_output=True, text=True, env=compiler_environment, check=False)
     assert failed.returncode != 0
-    assert "defer-tool:" in failed.stdout + failed.stderr
+    assert "recast-tool:" in failed.stdout + failed.stderr
     main.write_text(original_main, encoding="utf-8")
     run(cmake, "--build", str(build))
     run(str(executable))

@@ -38,7 +38,7 @@ def main() -> int:
         key = tuple(sorted(set(filter(None, prerequisites.split(";")))))
         batches[key].append((target, source, output))
 
-    generated_dir = args.build_dir / "defer_transformed"
+    generated_dir = args.build_dir / "recast_transformed"
     rules: list[str] = []
     for prerequisites, entries in sorted(batches.items()):
         identity = json.dumps([args.stage, prerequisites], ensure_ascii=True)
@@ -53,7 +53,7 @@ def main() -> int:
         overlays = " ".join(cmake_literal(Path(output).parent.as_posix() + ".vfs.json") for _, _, output in entries) if args.header_overlays else ""
         overlay_argument = "--header-overlays" if args.header_overlays else ""
         targets = sorted({target for target, _, _ in entries})
-        name = cmake_literal(f"defer-{batch_id}")
+        name = cmake_literal(f"recast-{batch_id}")
         rules.append(f"""add_custom_command(
     OUTPUT {outputs} {stamps} {overlays}
     COMMAND ${{DEFER_PYTHON_COMMAND}} "${{DEFER_TOOL_ROOT}}/python/defer.py"

@@ -83,7 +83,7 @@ def configure_llvm(work: Path, source: Path, jobs: int) -> Path:
 
 def combine_archives(stage: Path, llvm: Path) -> None:
     windows = sys.platform == "win32"
-    sdk = stage / "lib" / ("defer-static.lib" if windows else "libdefer-static.a")
+    sdk = stage / "lib" / ("recast-static.lib" if windows else "librecast-static.a")
     archives = [sdk, *sorted((llvm / "lib").glob("*.lib" if windows else "*.a"))]
     if sys.platform == "darwin":
         # Darwin's libtool rejects LLVM's auxiliary target file. The actual
@@ -148,14 +148,14 @@ find_package(Threads REQUIRED)
 add_library(sdk_static STATIC IMPORTED)
 add_library(sdk_shared SHARED IMPORTED)
 if(WIN32)
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/defer-static.lib")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_IMPLIB "${SDK_ROOT}/lib/defer-shared.lib" IMPORTED_LOCATION "${SDK_ROOT}/bin/defer-shared.dll")
+  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/recast-static.lib")
+  set_target_properties(sdk_shared PROPERTIES IMPORTED_IMPLIB "${SDK_ROOT}/lib/recast-shared.lib" IMPORTED_LOCATION "${SDK_ROOT}/bin/recast-shared.dll")
 elseif(APPLE)
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/libdefer-static.a")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/libdefer-shared.dylib")
+  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-static.a")
+  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-shared.dylib")
 else()
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/libdefer-static.a")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/libdefer-shared.so")
+  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-static.a")
+  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-shared.so")
 endif()
 foreach(kind static shared)
   add_executable(smoke_${kind} main.cpp)
@@ -177,7 +177,7 @@ endforeach()
     run(*configure)
     run("cmake", "--build", build)
     if sys.platform == "win32":
-        shutil.copyfile(stage / "bin/defer-shared.dll", build / "defer-shared.dll")
+        shutil.copyfile(stage / "bin/recast-shared.dll", build / "recast-shared.dll")
     for kind in ("static", "shared"):
         executable = build / (f"smoke_{kind}.exe" if sys.platform == "win32" else f"smoke_{kind}")
         if subprocess.check_output([executable, stage / "include"], text=True) != "SDK smoke test\n":
@@ -219,8 +219,8 @@ def main() -> None:
     binary = stage / "bin" / ("recast.exe" if sys.platform == "win32" else "recast")
     run(binary, "--help")
     verify_linkage(binary, args.musl)
-    shared = stage / ("bin/defer-shared.dll" if sys.platform == "win32" else
-                      "lib/libdefer-shared.dylib" if sys.platform == "darwin" else "lib/libdefer-shared.so")
+    shared = stage / ("bin/recast-shared.dll" if sys.platform == "win32" else
+                      "lib/librecast-shared.dylib" if sys.platform == "darwin" else "lib/librecast-shared.so")
     verify_linkage(shared)
     generated = work / "Recast.cmake"
     run(binary, "cmake-config", "--write-file", generated)

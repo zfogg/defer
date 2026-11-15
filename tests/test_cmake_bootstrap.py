@@ -36,7 +36,7 @@ def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend
         f'include("{(ROOT / "Recast.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
         f'target_include_directories(probe PRIVATE "{(ROOT / "include").as_posix()}")\n'
         'target_compile_options(probe PRIVATE -sASSERTIONS=1)\nset_property(TARGET probe PROPERTY C_STANDARD 17)\n'
-        'defer_target(probe)\n', encoding="utf-8"
+        'recast_target(probe)\n', encoding="utf-8"
     )
     build = tmp_path / "build"
     env = {**os.environ, "EM_CACHE": str(tmp_path / "emsdk cache")}
@@ -47,7 +47,7 @@ def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend
         result = subprocess.run(args, capture_output=True, text=True, env=env, check=False, timeout=180)
         assert result.returncode == 0, result.stdout + result.stderr
     if backend == "NATIVE":
-        manifest = next((build / "defer_transformed").glob("batch-*.txt"))
+        manifest = next((build / "recast_transformed").glob("batch-*.txt"))
         command = [binary, "--batch", str(manifest), "--compilation-database", str(build),
                    "--incremental", "--dependency-stamps"]
         changed_env = {**env, "EM_CACHE": str(tmp_path / "second sdk cache")}
@@ -76,7 +76,7 @@ def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) ->
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(probe C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
         f'include("{(ROOT / "Recast.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
-        f'target_include_directories(probe PRIVATE "{(ROOT / "include").as_posix()}")\ndefer_target(probe)\n',
+        f'target_include_directories(probe PRIVATE "{(ROOT / "include").as_posix()}")\nrecast_target(probe)\n',
         encoding="utf-8",
     )
     build = tmp_path / "build"
@@ -118,7 +118,7 @@ def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path, bac
         '    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${source}" "${generated}" DEPENDS "${source}")\n'
         '  set(${out} "${generated}" PARENT_SCOPE)\nendfunction()\n'
         f'add_executable(probe main.c other.c)\ntarget_include_directories(probe PRIVATE "{(ROOT / "include").as_posix()}")\n'
-        'set(DEFER_SOURCE_HOOK preprocess)\ndefer_target(probe)\n', encoding="utf-8"
+        'set(DEFER_SOURCE_HOOK preprocess)\nrecast_target(probe)\n', encoding="utf-8"
     )
     build = tmp_path / "build"
     for args in ([cmake, "-S", str(project), "-B", str(build), "-G", "Ninja",
@@ -173,7 +173,7 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, c
         'execute_process(COMMAND "${tool}" cmake-config --write-file "${root}/Recast.cmake" COMMAND_ERROR_IS_FATAL ANY)\n'
         'set(DEFER_NATIVE_BINARY "${tool}")\ninclude("${root}/Recast.cmake")\n'
         'add_executable(consumer main.c)\ntarget_include_directories(consumer PRIVATE "${root}/include")\n'
-        'defer_targets(consumer)\n', encoding="utf-8"
+        'recast_targets(consumer)\n', encoding="utf-8"
     )
     source = project / "main.c"
     source.write_text('int main(void) { return 0; }\n', encoding="utf-8")
