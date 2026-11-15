@@ -48,15 +48,15 @@ Build configuration options can be passed to CMake as `-DNAME=VALUE`:
 Build and install the tool as described above, add the installation's `bin` directory to your `PATH`, then transform and compile a source file:
 
 ```sh
-recast examples/hello_world/main.c build/hello.c -- -Icpp/include
-clang build/hello.c -Icpp/include -o build/hello
+recast examples/hello_world/main.c build/hello.c -- -Iinclude
+clang build/hello.c -Iinclude -o build/hello
 ./build/hello
 ```
 
 Or transform a stream (the filename determines language and relative include resolution):
 
 ```sh
-recast --filename input.c -- -std=c17 -Icpp/include < input.c > output.c
+recast --filename input.c -- -std=c17 -Iinclude < input.c > output.c
 ```
 
 Use `recast --help` for batch manifests, compilation databases, diagnostics, and other options. The Python implementation can be invoked as `uv run --frozen python -m defer` and requires an LLVM libclang shared library.

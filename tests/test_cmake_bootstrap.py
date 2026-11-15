@@ -34,7 +34,7 @@ def test_emscripten_uses_driver_sysroot_with_empty_cache(tmp_path: Path, backend
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(probe C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
         f'include("{(ROOT / "Recast.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
-        f'target_include_directories(probe PRIVATE "{(ROOT / "cpp/include").as_posix()}")\n'
+        f'target_include_directories(probe PRIVATE "{(ROOT / "include").as_posix()}")\n'
         'target_compile_options(probe PRIVATE -sASSERTIONS=1)\nset_property(TARGET probe PROPERTY C_STANDARD 17)\n'
         'defer_target(probe)\n', encoding="utf-8"
     )
@@ -76,7 +76,7 @@ def test_cmake_uses_musl_compile_database_without_extra_flags(tmp_path: Path) ->
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(probe C)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
         f'include("{(ROOT / "Recast.cmake").as_posix()}")\nadd_library(probe STATIC probe.c)\n'
-        f'target_include_directories(probe PRIVATE "{(ROOT / "cpp/include").as_posix()}")\ndefer_target(probe)\n',
+        f'target_include_directories(probe PRIVATE "{(ROOT / "include").as_posix()}")\ndefer_target(probe)\n',
         encoding="utf-8",
     )
     build = tmp_path / "build"
@@ -117,7 +117,7 @@ def test_source_hook_preprocesses_deferred_and_plain_sources(tmp_path: Path, bac
         '  add_custom_command(OUTPUT "${generated}" COMMAND "${CMAKE_COMMAND}" -E make_directory "${dir}"\n'
         '    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${source}" "${generated}" DEPENDS "${source}")\n'
         '  set(${out} "${generated}" PARENT_SCOPE)\nendfunction()\n'
-        f'add_executable(probe main.c other.c)\ntarget_include_directories(probe PRIVATE "{(ROOT / "cpp/include").as_posix()}")\n'
+        f'add_executable(probe main.c other.c)\ntarget_include_directories(probe PRIVATE "{(ROOT / "include").as_posix()}")\n'
         'set(DEFER_SOURCE_HOOK preprocess)\ndefer_target(probe)\n', encoding="utf-8"
     )
     build = tmp_path / "build"
@@ -151,7 +151,7 @@ def test_downloaded_tool_generates_cmake_and_detects_new_defer(tmp_path: Path, c
     archive = tmp_path / "defer.zip"
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.write(tool, f"bin/{tool.name}")
-        bundle.write(ROOT / "cpp/include/defer.h", "include/defer.h")
+        bundle.write(ROOT / "include/defer.h", "include/defer.h")
         if sys.platform == "win32":
             bundle.write(tool.parent / "libclang.dll", "bin/libclang.dll")
     checksum = hashlib.sha256(archive.read_bytes()).hexdigest()

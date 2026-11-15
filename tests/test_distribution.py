@@ -47,7 +47,7 @@ def test_direct_transform_finds_builtin_headers(command: list[str], tmp_path: Pa
     source = tmp_path / "source.c"
     output = tmp_path / "output.c"
     source.write_text('#include <stdio.h>\n#include "defer.h"\nint main(void) { defer(puts("done")); return 0; }\n', encoding="utf-8")
-    include = f"-I{ROOT / 'cpp' / 'include'}"
+    include = f"-I{ROOT / 'include'}"
     result = subprocess.run([*command, str(source), str(output), "--", "-std=c17", include],
                             cwd=tmp_path, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
@@ -59,7 +59,7 @@ def test_direct_transform_finds_builtin_headers(command: list[str], tmp_path: Pa
 def test_module_and_executable_transform_standard_input(command: list[str], tmp_path: Path) -> None:
     source = b'#include "defer.h"\nvoid f(void) { defer((void)0); }\n'
     result = subprocess.run(
-        [*command, "--filename", str(tmp_path / "virtual.c"), "--", "-I", str(ROOT / "cpp" / "include")],
+        [*command, "--filename", str(tmp_path / "virtual.c"), "--", "-I", str(ROOT / "include")],
         cwd=tmp_path,
         input=source,
         capture_output=True,
