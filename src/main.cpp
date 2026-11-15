@@ -41,10 +41,37 @@
 #endif
 
 namespace {
-std::string default_transforms() {
-  if (const char *value = std::getenv("RECAST_TRANSFORMS"); value && *value)
+const char *environment_value(const char *name) {
+  const char *value = std::getenv(name);
+  return value && *value ? value : nullptr;
+}
+
+std::string environment_string(const char *name, std::string fallback = {}) {
+  if (const char *value = environment_value(name))
     return value;
-  return "defer";
+  return fallback;
+}
+
+unsigned environment_unsigned(const char *name, unsigned fallback = 0) {
+  const char *value = environment_value(name);
+  if (!value)
+    return fallback;
+  char *end = nullptr;
+  const unsigned long parsed = std::strtoul(value, &end, 10);
+  if (end == value || *end != '\0' || parsed > std::numeric_limits<unsigned>::max())
+    return fallback;
+  return static_cast<unsigned>(parsed);
+}
+
+bool environment_flag(const char *name, bool fallback = false) {
+  const char *value = environment_value(name);
+  if (!value)
+    return fallback;
+  return llvm::StringSwitch<bool>(value)
+      .Case("1", true).Case("ON", true).Case("TRUE", true)
+      .Case("on", true).Case("true", true)
+      .Case("0", false).Case("OFF", false).Case("FALSE", false)
+      .Case("off", false).Case("false", false).Default(fallback);
 }
 
 llvm::cl::opt<bool> scan_only("scan", llvm::cl::desc("List source files containing possible defer calls"));
@@ -61,18 +88,21 @@ llvm::cl::opt<std::string> depfile("depfile", llvm::cl::desc("Write header depen
 llvm::cl::opt<bool> dependency_stamps("dependency-stamps", llvm::cl::desc("Write per-output dependency stamps"));
 llvm::cl::opt<bool> incremental("incremental", llvm::cl::desc("Reuse unchanged batch transformations"));
 llvm::cl::opt<bool> preamble("preamble", llvm::cl::desc("Experimentally reuse Clang preambles for validation"));
-llvm::cl::opt<std::string> shared_cache("shared-cache", llvm::cl::desc("Directory for reusable transformation cache"));
+llvm::cl::opt<std::string> shared_cache(
+    "shared-cache", llvm::cl::desc("Directory for reusable transformation cache"),
+    llvm::cl::init(environment_string("RECAST_SHARED_CACHE")));
 llvm::cl::opt<std::string> header_overlay("header-overlay",
                                           llvm::cl::desc("Write an experimental per-source Clang header overlay"));
 llvm::cl::opt<bool>
     header_overlays("header-overlays",
-                    llvm::cl::desc("Write an experimental Clang header overlay for every batch source"));
+                    llvm::cl::desc("Write an experimental Clang header overlay for every batch source"),
+                    llvm::cl::init(environment_flag("RECAST_HEADER_OVERLAYS")));
 llvm::cl::opt<std::string>
     batch("batch",
           llvm::cl::desc("Transform manifest source/output pairs with optional per-file JSON argument arrays"));
 llvm::cl::opt<std::string> stream_filename("filename", llvm::cl::desc("Required virtual input path for stdin"));
 llvm::cl::opt<unsigned> jobs("jobs", llvm::cl::desc("Maximum concurrent transformations (default: available cores)"),
-                             llvm::cl::init(0));
+                             llvm::cl::init(environment_unsigned("RECAST_JOBS")));
 llvm::cl::opt<std::string> libclang("libclang", llvm::cl::desc("Path to the libclang shared library"));
 llvm::cl::opt<std::string> explain_location("explain", llvm::cl::desc("Explain cleanup at source:line"));
 llvm::cl::opt<std::string> show_location("show-transformed",
@@ -80,7 +110,7 @@ llvm::cl::opt<std::string> show_location("show-transformed",
 llvm::cl::opt<std::string> transforms(
     "transforms",
     llvm::cl::desc("Comma-separated transformation passes (defer, closures; closures run before defer)"),
-    llvm::cl::init(default_transforms()));
+    llvm::cl::init(environment_string("RECAST_TRANSFORMS", "all")));
 
 using FileMetadata = std::pair<long long, std::uintmax_t>;
 

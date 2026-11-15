@@ -353,19 +353,14 @@ function(recast_finish_batches)
                 string(APPEND _content "${_source}\t${_output}\n")
             endforeach()
             file(GENERATE OUTPUT "${_manifest}" CONTENT "${_content}")
-            if(_header_active)
-                set(_extra_arguments --header-overlays)
-            elseif(RECAST_SHARED_CACHE)
-                set(_extra_arguments --shared-cache "${RECAST_SHARED_CACHE}")
-            else()
-                set(_extra_arguments "")
-            endif()
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
-                COMMAND "${CMAKE_COMMAND}" -E env "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
+                COMMAND "${CMAKE_COMMAND}" -E env
+                    "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
+                    "RECAST_JOBS=${RECAST_JOBS}"
+                    "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
+                    "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
                     "$<TARGET_FILE:recast-native>" --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
-                    --jobs "${RECAST_JOBS}"
-                    ${_extra_arguments}
                 DEPENDS ${_sources} "${_manifest}" recast-native "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
             add_custom_target("recast-${_id}" DEPENDS ${_outputs} ${_stamps} ${_overlays})
