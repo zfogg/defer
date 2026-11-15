@@ -288,7 +288,7 @@ def test_stdin_supports_cpp_and_objc_languages(
         flags += ["-fobjc-exceptions", *objc_syntax_runtime()]
         source = b'#include <defer.h>\nvoid f(void) { defer((void)0); }\n'
     else:
-        flags += ["-x", "c++", "-std=c++11"]
+        flags += ["-x", "c++", "-std=c++23"]
         source = b'#include <defer.h>\nvoid f() { defer((void)0); }\n'
     result = subprocess.run([*tool_command(transform_environment), "--filename", str(virtual), "--", *flags],
                             input=source, capture_output=True, env=transform_environment, check=False)
@@ -350,7 +350,7 @@ def test_stdin_matches_file_transformation(
     if extension == "m":
         flags += ["-fobjc-exceptions", *objc_syntax_runtime()]
     elif extension == "cpp":
-        flags += ["-std=c++11"]
+        flags += ["-std=c++23"]
     file_result = subprocess.run([*tool_command(transform_environment), str(source), str(output), "--", *flags],
                                  capture_output=True, env=transform_environment, check=False)
     assert file_result.returncode == 0, file_result.stderr.decode(errors="replace")
@@ -1088,7 +1088,7 @@ def test_cpp_defer_handles_scope_exceptions_and_cancellation(tmp_path: Path) -> 
     )
     executable = tmp_path / ("program.exe" if sys.platform == "win32" else "program")
     result = subprocess.run(
-        [compiler, "-std=c++11", "-I", str(ROOT / "include"), str(source), "-o", str(executable)],
+        [compiler, "-std=c++23", "-I", str(ROOT / "include"), str(source), "-o", str(executable)],
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -1110,13 +1110,13 @@ def test_cpp_tool_output_preserves_exception_cleanup(
     )
     output = tmp_path / f"output.{extension}"
     result = subprocess.run(
-        [*tool_command(transform_environment), str(source), str(output), "--", "-x", "c++", "-std=c++11", "-I", str(ROOT / "include")],
+        [*tool_command(transform_environment), str(source), str(output), "--", "-x", "c++", "-std=c++23", "-I", str(ROOT / "include")],
         capture_output=True, text=True, env=transform_environment, check=False,
     )
     assert result.returncode == 0, result.stderr
     executable = tmp_path / ("program.exe" if sys.platform == "win32" else "program")
     result = subprocess.run(
-        [compiler, "-x", "c++", "-std=c++11", "-I", str(ROOT / "include"), str(output), "-o", str(executable)],
+        [compiler, "-x", "c++", "-std=c++23", "-I", str(ROOT / "include"), str(output), "-o", str(executable)],
         capture_output=True, text=True, env=transform_environment, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -1128,7 +1128,7 @@ def test_cpp_tool_rejects_invalid_defer(tmp_path: Path, transform_environment: d
     output = tmp_path / "output.cpp"
     source.write_text('#include <defer.h>\nvoid f() { defer(unknown()); }\n', encoding="utf-8")
     result = subprocess.run(
-        [*tool_command(transform_environment), str(source), str(output), "--", "-std=c++11", "-I", str(ROOT / "include")],
+        [*tool_command(transform_environment), str(source), str(output), "--", "-std=c++23", "-I", str(ROOT / "include")],
         capture_output=True, text=True, env=transform_environment, check=False,
     )
     assert result.returncode != 0
@@ -1153,7 +1153,7 @@ def test_cpp_defer_in_included_header(tmp_path: Path, extension: str) -> None:
     )
     executable = tmp_path / ("program.exe" if sys.platform == "win32" else "program")
     result = subprocess.run(
-        [compiler, "-std=c++11", "-I", str(ROOT / "include"), str(source), "-o", str(executable)],
+        [compiler, "-std=c++23", "-I", str(ROOT / "include"), str(source), "-o", str(executable)],
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -1188,7 +1188,7 @@ def test_cpp_defer_behavior_matrix(
     source = tmp_path / f"input.{extension}"
     source.write_text('#include <defer.h>\nstatic int trace;\n' + cases[case] + '\n', encoding="utf-8")
     output = tmp_path / f"output.{extension}"
-    flags = ["-x", "c++", "-std=c++11", "-I", str(ROOT / "include")]
+    flags = ["-x", "c++", "-std=c++23", "-I", str(ROOT / "include")]
     result = subprocess.run([*tool_command(transform_environment), str(source), str(output), "--", *flags],
                             capture_output=True, text=True, env=transform_environment, check=False)
     assert result.returncode == 0, result.stderr
@@ -1213,7 +1213,7 @@ def test_cpp_tool_rejects_invalid_scope(
     source, output = tmp_path / f"input.{extension}", tmp_path / f"output.{extension}"
     source.write_text('#include <defer.h>\nvoid f() { ' + body + ' }\n', encoding="utf-8")
     result = subprocess.run(
-        [*tool_command(transform_environment), str(source), str(output), "--", "-x", "c++", "-std=c++11", "-I", str(ROOT / "include")],
+        [*tool_command(transform_environment), str(source), str(output), "--", "-x", "c++", "-std=c++23", "-I", str(ROOT / "include")],
         capture_output=True, text=True, env=transform_environment, check=False,
     )
     assert result.returncode != 0
@@ -1227,7 +1227,7 @@ def test_cpp_compiler_rejects_goto_past_guard(tmp_path: Path) -> None:
     source = tmp_path / "source.cpp"
     source.write_text('#include <defer.h>\n'
                       'void f() { goto end; defer((void)0); end:; }\n', encoding="utf-8")
-    result = subprocess.run([compiler, "-std=c++11", "-fsyntax-only", "-I", str(ROOT / "include"), str(source)],
+    result = subprocess.run([compiler, "-std=c++23", "-fsyntax-only", "-I", str(ROOT / "include"), str(source)],
                             capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "goto" in result.stderr
@@ -1246,7 +1246,7 @@ def test_cpp_header_across_translation_units(tmp_path: Path, transform_environme
     )
     output = tmp_path / "output.hpp"
     result = subprocess.run(
-        [*tool_command(transform_environment), str(header), str(output), "--", "-x", "c++", "-std=c++11", "-I", str(ROOT / "include")],
+        [*tool_command(transform_environment), str(header), str(output), "--", "-x", "c++", "-std=c++23", "-I", str(ROOT / "include")],
         capture_output=True, text=True, env=transform_environment, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -1256,7 +1256,7 @@ def test_cpp_header_across_translation_units(tmp_path: Path, transform_environme
     (tmp_path / "main.cpp").write_text('int a(); int b(); int main() { return !a() || !b(); }\n', encoding="utf-8")
     executable = tmp_path / ("program.exe" if sys.platform == "win32" else "program")
     result = subprocess.run(
-        [compiler, "-std=c++11", "-I", str(ROOT / "include"), str(tmp_path / "a.cpp"), str(tmp_path / "b.cpp"),
+        [compiler, "-std=c++23", "-I", str(ROOT / "include"), str(tmp_path / "a.cpp"), str(tmp_path / "b.cpp"),
          str(tmp_path / "main.cpp"), "-o", str(executable)],
         capture_output=True, text=True, env=transform_environment, check=False,
     )
@@ -2087,7 +2087,7 @@ def test_objcpp_tool_accepts_exception_cleanup(tmp_path: Path, transform_environ
         'int value; void f() { defer(value = 1); @throw (id)0; }\n', encoding="utf-8"
     )
     output = tmp_path / "output.mm"
-    flags = ["-x", "objective-c++", "-std=c++11", "-fobjc-runtime=gnustep-2.0", "-fobjc-exceptions", "-fexceptions", "-I", str(ROOT / "include")]
+    flags = ["-x", "objective-c++", "-std=c++23", "-fobjc-runtime=gnustep-2.0", "-fobjc-exceptions", "-fexceptions", "-I", str(ROOT / "include")]
     result = subprocess.run(
         [*tool_command(transform_environment), str(source), str(output), "--", *flags],
         capture_output=True, text=True, env=transform_environment, check=False,
@@ -2103,7 +2103,7 @@ def test_objcpp_tool_rejects_legacy_exception_runtime(tmp_path: Path, transform_
     source.write_text('#include <defer.h>\nvoid f() { defer((void)0); }\n', encoding="utf-8")
     output = tmp_path / "output.mm"
     result = subprocess.run(
-        [*tool_command(transform_environment), str(source), str(output), "--", "-x", "objective-c++", "-std=c++11",
+        [*tool_command(transform_environment), str(source), str(output), "--", "-x", "objective-c++", "-std=c++23",
          "-fobjc-runtime=gcc", "-I", str(ROOT / "include")],
         capture_output=True, text=True, env=transform_environment, check=False,
     )
