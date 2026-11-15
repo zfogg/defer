@@ -365,6 +365,12 @@ def check_libclang_version() -> None:
         raise TransformError(f"LLVM 19 or newer libclang required, found {version}")
 
 
+def validate_transforms(value: str) -> None:
+    transforms = value.replace(" ", "").split(",")
+    if transforms != ["all"] and any(transform not in {"defer"} for transform in transforms):
+        raise TransformError("the Python backend supports only the defer transformation")
+
+
 def batch_main() -> int:
     """Transform a CMake batch in one interpreter and emit one combined depfile."""
     parser = argparse.ArgumentParser(
@@ -376,15 +382,14 @@ def batch_main() -> int:
     parser.add_argument("--compilation-database", type=Path, help="database directory or compile_commands.json")
     parser.add_argument("--depfile", type=Path)
     parser.add_argument("--dependency-stamps", action="store_true")
+    parser.add_argument("--transforms", default=os.environ.get("RECAST_TRANSFORMS", "all"))
     parser.add_argument(
         "--header-overlays",
         action="store_true",
         default=os.environ.get("RECAST_HEADER_OVERLAYS", "OFF").upper() in {"1", "ON", "TRUE"},
     )
     args = parser.parse_args()
-    transforms = os.environ.get("RECAST_TRANSFORMS", "all").replace(" ", "").split(",")
-    if transforms != ["all"] and any(transform not in {"defer"} for transform in transforms):
-        raise TransformError("the Python backend supports only the defer transformation")
+    validate_transforms(args.transforms)
     if args.libclang:
         cindex.Config.set_library_file(str(args.libclang.resolve()))
     manifest = args.batch.resolve()
@@ -486,6 +491,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
     parser.add_argument("--compilation-database", type=Path)
     parser.add_argument("--depfile", type=Path)
     parser.add_argument("--dependency-stamp", type=Path)
+    parser.add_argument("--transforms", default=os.environ.get("RECAST_TRANSFORMS", "all"))
     parser.add_argument("--header-overlay", type=Path)
     parser.add_argument("--filename", help="required virtual input path for stdin")
     parser.add_argument("source", type=Path, nargs="?")
@@ -503,6 +509,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
         trailing_args = argv[separator + 1 :]
         argv = argv[:separator]
     args = parser.parse_args(argv)
+    validate_transforms(args.transforms)
     if args.libclang:
         cindex.Config.set_library_file(str(args.libclang.resolve()))
     clang_args = [*args.clang_args, *trailing_args]

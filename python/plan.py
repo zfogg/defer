@@ -58,10 +58,9 @@ def main() -> int:
         rules.append(f"""add_custom_command(
     OUTPUT {outputs} {stamps} {overlays}
     COMMAND "${{CMAKE_COMMAND}}" -E env
-        "RECAST_TRANSFORMS=${{RECAST_TRANSFORMS}}"
         "RECAST_HEADER_OVERLAYS={header_environment}"
         ${{RECAST_PYTHON_COMMAND}} "${{RECAST_TOOL_ROOT}}/python/defer.py"
-        --batch {cmake_literal(manifest.as_posix())} --libclang "${{RECAST_LIBCLANG_PATH}}"
+        --transforms "${{RECAST_TRANSFORMS}}" --batch {cmake_literal(manifest.as_posix())} --libclang "${{RECAST_LIBCLANG_PATH}}"
         --compilation-database "${{CMAKE_BINARY_DIR}}" --depfile {cmake_literal(depfile.as_posix())} --dependency-stamps {overlay_argument}
     DEPENDS {sources} {cmake_literal(manifest.as_posix())}
         "${{RECAST_TOOL_ROOT}}/python/defer.py"
