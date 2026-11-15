@@ -9,6 +9,7 @@
 #include <atomic>
 #include <clang-c/Index.h>
 #include <exception>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -40,6 +41,12 @@
 #endif
 
 namespace {
+std::string default_transforms() {
+  if (const char *value = std::getenv("RECAST_TRANSFORMS"); value && *value)
+    return value;
+  return "defer";
+}
+
 llvm::cl::opt<bool> scan_only("scan", llvm::cl::desc("List source files containing possible defer calls"));
 llvm::cl::opt<std::string> scan_input("scan-input", llvm::cl::desc("Read source paths from a UTF-8 file"));
 llvm::cl::opt<std::string> plan_records("plan-records", llvm::cl::desc("Plan source/output records"));
@@ -73,7 +80,7 @@ llvm::cl::opt<std::string> show_location("show-transformed",
 llvm::cl::opt<std::string> transforms(
     "transforms",
     llvm::cl::desc("Comma-separated transformation passes (defer, closures; closures run before defer)"),
-    llvm::cl::init("defer"));
+    llvm::cl::init(default_transforms()));
 
 using FileMetadata = std::pair<long long, std::uintmax_t>;
 

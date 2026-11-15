@@ -361,8 +361,8 @@ function(recast_finish_batches)
                 set(_extra_arguments "")
             endif()
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
-                COMMAND "$<TARGET_FILE:recast-native>" --batch "${_manifest}"
-                    --transforms "${RECAST_TRANSFORMS}"
+                COMMAND "${CMAKE_COMMAND}" -E env "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
+                    "$<TARGET_FILE:recast-native>" --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                     --jobs "${RECAST_JOBS}"
                     ${_extra_arguments}
