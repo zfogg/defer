@@ -361,6 +361,7 @@ function(defer_finish_batches)
             endif()
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "$<TARGET_FILE:defer-native>" --batch "${_manifest}"
+                    --transforms defer,closures
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                     --jobs "${DEFER_JOBS}"
                     ${_extra_arguments}
