@@ -528,7 +528,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
             check_libclang_version()
             source = sys.stdin.buffer.read()
             _, output = transform_input(cindex.Index.create(), path, source,
-                                        [*clang_args, "-DDEFER_PARSING=1"], objc)
+                                        [*clang_args, "-DRECAST_DEFER_PARSING=1"], objc)
             sys.stdout.buffer.write(output)
             sys.stdout.buffer.flush()
             return 0
@@ -548,7 +548,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
             if is_cpp_source(source_path, clang_args):
                 raise TransformError("C++ defer inspection is not supported; C++ uses native scope guards")
             source = source_path.read_bytes()
-            clang_args.append("-DDEFER_PARSING=1")
+            clang_args.append("-DRECAST_DEFER_PARSING=1")
             index = cindex.Index.create()
             tu, source = parse_wrapped(index, source_path, clang_args, source)
             transformer = Transformer(source_path, source, tu, objc=objc)
@@ -597,7 +597,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
         if objc:
             require_objc_exceptions(clang_args)
         source = args.source.read_bytes()
-        clang_args.append("-DDEFER_PARSING=1")
+        clang_args.append("-DRECAST_DEFER_PARSING=1")
         check_libclang_version()
         index = cindex.Index.create()
         if args.header_overlay:

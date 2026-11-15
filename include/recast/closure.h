@@ -7,7 +7,7 @@
 #define RECAST_CLOSURE_UNTRANSFORMED() \
   _Static_assert(0, "recast_closure() requires the Recast closure transformation")
 
-#if defined(RECAST_PARSING)
+#if defined(RECAST_CLOSURE_PARSING)
 void __recast_closure_marker(void);
 #define recast_closure(name, result_type, parameters, captures, ...) \
   do { __recast_closure_marker(); } while (0)

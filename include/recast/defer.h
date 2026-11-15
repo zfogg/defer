@@ -29,7 +29,7 @@ template <typename F> guard<F> make_guard(F action) { return guard<F>(static_cas
 #define DEFER(...) auto RECAST_JOIN(__defer_guard_, __COUNTER__) = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
 #define DEFER_NAMED(name, ...) auto name = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
 #define DEFER_CANCEL(name) (name).cancel()
-#elif defined(RECAST_PARSING) || defined(DEFER_PARSING)
+#elif defined(RECAST_DEFER_PARSING)
 void __recast_defer_marker(void);
 #define DEFER(...) do { __recast_defer_marker(); } while (0)
 #define DEFER_NAMED(name, ...) do { __recast_defer_marker(); } while (0)
