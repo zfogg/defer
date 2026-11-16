@@ -81,8 +81,8 @@ function(recast_collect_headers out_var directory is_root allow_build)
         return()
     endif()
     if(UNIX)
-        find_program(_defer_find NAMES find)
-        if(_defer_find)
+        find_program(_recast_find NAMES find)
+        if(_recast_find)
             # Discover directories and headers without a CMake filesystem
             # query for every file on a potentially remote source mount.
             # Directory timestamps detect membership changes; header contents
@@ -93,10 +93,10 @@ function(recast_collect_headers out_var directory is_root allow_build)
                 set(_prune \( ${_prune} -o -path "${_build}" \))
             endif()
             list(APPEND _prune -prune -o)
-            execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune} -type d -print
+            execute_process(COMMAND "${_recast_find}" -L "${_directory}" ${_prune} -type d -print
                 OUTPUT_VARIABLE _directory_output RESULT_VARIABLE _directory_result ERROR_VARIABLE _directory_error
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
-            execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune}
+            execute_process(COMMAND "${_recast_find}" -L "${_directory}" ${_prune}
                 \( -type f -o -type l \) \( -name "*.h" -o -name "*.hpp" -o -name "*.hh"
                 -o -name "*.hxx" -o -name "*.inc" -o -name "*.def" -o -name "*.m" -o -name "*.mm" \) -print
                 OUTPUT_VARIABLE _header_output RESULT_VARIABLE _header_result ERROR_VARIABLE _header_error
