@@ -294,6 +294,13 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       ++i;
       continue;
     }
+    // These diagnostics are GCC-only. The native transformer parses with
+    // libclang, where forwarding them produces warnings for every source.
+    if (value == "-Wlogical-op" || value == "-Wduplicated-cond" || value == "-Wduplicated-branches" ||
+        value == "-Wtrampolines") {
+      ++i;
+      continue;
+    }
     if (value == "-ivfsoverlay" && i + 1 < args.size() &&
         fs::weakly_canonical(working_directory / fs::path(args[i + 1])) == fs::weakly_canonical(generated_overlay)) {
       i += 2;
