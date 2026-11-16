@@ -1,10 +1,12 @@
 include_guard(GLOBAL)
+if(NOT RECAST_TOOL_ROOT)
+  get_filename_component(RECAST_TOOL_ROOT "${CMAKE_CURRENT_LIST_DIR}" DIRECTORY)
+endif()
 set(RECAST_SOURCE_ROOT "${CMAKE_SOURCE_DIR}" CACHE PATH "Root of sources to transform")
 set(RECAST_SOURCE_DIRS "include;lib;src;tests" CACHE STRING
   "Source directories relative to RECAST_SOURCE_ROOT")
 set(RECAST_BACKEND "NATIVE" CACHE STRING "Transformer backend")
 set(RECAST_HEADER_OVERLAYS "AUTO" CACHE STRING "Header overlays: AUTO, ON, or OFF")
-set(RECAST_NATIVE_BINARY "" CACHE FILEPATH "Host recast executable")
 set(RECAST_SHARED_CACHE "" CACHE PATH "Shared transformation cache")
 set(RECAST_WRAPPER_HEADER_DIRS "" CACHE STRING "Additional wrapper header directories")
 set(RECAST_TRANSFORMS "all" CACHE STRING "Comma-separated Recast transforms used by CMake (all, defer, closures)")
@@ -79,8 +81,8 @@ function(recast_collect_headers out_var directory is_root allow_build)
         return()
     endif()
     if(UNIX)
-        find_program(_defer_find NAMES find)
-        if(_defer_find)
+        find_program(_recast_find NAMES find)
+        if(_recast_find)
             # Discover directories and headers without a CMake filesystem
             # query for every file on a potentially remote source mount.
             # Directory timestamps detect membership changes; header contents
@@ -91,10 +93,10 @@ function(recast_collect_headers out_var directory is_root allow_build)
                 set(_prune \( ${_prune} -o -path "${_build}" \))
             endif()
             list(APPEND _prune -prune -o)
-            execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune} -type d -print
+            execute_process(COMMAND "${_recast_find}" -L "${_directory}" ${_prune} -type d -print
                 OUTPUT_VARIABLE _directory_output RESULT_VARIABLE _directory_result ERROR_VARIABLE _directory_error
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
-            execute_process(COMMAND "${_defer_find}" -L "${_directory}" ${_prune}
+            execute_process(COMMAND "${_recast_find}" -L "${_directory}" ${_prune}
                 \( -type f -o -type l \) \( -name "*.h" -o -name "*.hpp" -o -name "*.hh"
                 -o -name "*.hxx" -o -name "*.inc" -o -name "*.def" -o -name "*.m" -o -name "*.mm" \) -print
                 OUTPUT_VARIABLE _header_output RESULT_VARIABLE _header_result ERROR_VARIABLE _header_error
@@ -364,11 +366,11 @@ function(recast_finish_batches)
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
                     "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
-                    "$<TARGET_FILE:recast>" --batch "${_manifest}"
+                    "$<TARGET_FILE:${_recast_tool_target}>" --batch "${_manifest}"
                     --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
                     --materialized-source-root "${RECAST_SOURCE_ROOT}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
-                DEPENDS ${_sources} "${_manifest}" recast-native "${CMAKE_BINARY_DIR}/compile_commands.json"
+                DEPENDS ${_sources} "${_manifest}" ${_recast_tool_target} "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
             add_custom_target("recast-${_id}" DEPENDS ${_outputs} ${_stamps} ${_overlays})
             add_dependencies(recast-materialized-headers "recast-${_id}")
@@ -587,19 +589,10 @@ function(recast_targets)
     message(FATAL_ERROR "recast_targets requires single-config Ninja or Unix Makefiles")
   endif()
   if(RECAST_BACKEND STREQUAL "NATIVE")
-    if(NOT RECAST_NATIVE_BINARY)
-      find_program(RECAST_NATIVE_BINARY NAMES recast REQUIRED)
+    if(NOT TARGET recast)
+      message(FATAL_ERROR "The native Recast target must be added before recast_targets()")
     endif()
-    if(NOT TARGET recast-native)
-      add_executable(recast-native IMPORTED GLOBAL)
-      set_property(TARGET recast-native PROPERTY IMPORTED_LOCATION "${RECAST_NATIVE_BINARY}")
-      # Multi-config generators (notably Visual Studio) resolve imported
-      # executables by configuration when used in generator expressions.
-      foreach(_recast_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
-        set_property(TARGET recast-native PROPERTY
-          "IMPORTED_LOCATION_${_recast_config}" "${RECAST_NATIVE_BINARY}")
-      endforeach()
-    endif()
+    set(_recast_tool_target recast)
   elseif(RECAST_BACKEND STREQUAL "PYTHON")
     if(NOT EXISTS "${RECAST_TOOL_ROOT}/python/defer.py")
       message(FATAL_ERROR "Set RECAST_TOOL_ROOT to a defer checkout for the Python backend")
