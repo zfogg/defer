@@ -212,26 +212,18 @@ std::string transform_closures(const std::string &source) {
     cursor = close + 1;
   }
   if (closures.empty()) return source;
-  // Keep the first lowering deliberately local: capture storage is created at
-  // the closure declaration and the body is expanded into a GNU statement
-  // expression at the call site. This gives C compilers correct lexical
-  // capture types without inventing a file-scope type from a block-local
-  // declaration; the typed helper lowering remains the next extension point.
+  // The closure body is expanded at each call site, where the captured locals
+  // are already in scope. Do not synthesize capture declarations here: GNU
+  // __typeof__ is unavailable in native MSVC C, and the source-level captures
+  // already provide the correct lexical semantics for the supported lowering.
   std::string output = source;
   for (auto it = closures.rbegin(); it != closures.rend(); ++it) {
-    std::string declarations;
-    for (const auto &capture : it->captures) {
-      const auto storage = "__recast_" + it->name + "_" + capture.name;
-      declarations += capture.reference ? "__typeof__(&" + capture.name + ") " + storage + " = &" + capture.name + ";\n"
-                                         : "__typeof__(" + capture.name + ") " + storage + " = " + capture.name + ";\n";
-    }
-    output.replace(it->begin, it->end - it->begin, declarations);
+    output.replace(it->begin, it->end - it->begin, "");
   }
   for (const auto &closure : closures) {
     std::map<std::string, std::string> names;
     for (const auto &capture : closure.captures) {
-      const auto storage = "__recast_" + closure.name + "_" + capture.name;
-      names.emplace(capture.name, capture.reference ? "(*" + storage + ")" : storage);
+      names.emplace(capture.name, capture.name);
     }
     const auto body = replace_captures(closure.body, names);
     const std::string call = closure.name + "(";
