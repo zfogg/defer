@@ -222,15 +222,12 @@ std::string transform_closures(const std::string &source) {
       names.emplace(capture.name, capture.reference ? "(*" + storage + ")" : storage);
     }
     const auto body = replace_captures(closure.body, names);
-    const std::string call = "recast_call(" + closure.name;
+    const std::string call = closure.name + "(";
     std::size_t pos = 0;
     while ((pos = output.find(call, pos)) != std::string::npos) {
-      const auto open = output.find('(', pos + 11);
+      const auto open = output.find('(', pos + closure.name.size());
       const auto close = matching(output, open, '(', ')');
       auto call_parts = comma_parts(std::string_view(output).substr(open + 1, close - open - 1));
-      if (call_parts.empty() || trim(call_parts.front()) != closure.name)
-        throw std::runtime_error("Recast closure call must name a declared closure");
-      call_parts.erase(call_parts.begin());
       std::string expression = "({ ";
       if (!closure.parameters.empty() && closure.parameters != "void") {
         const auto declarations = comma_parts(closure.parameters);

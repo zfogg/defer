@@ -139,8 +139,7 @@ inline bool may_contain_defer(std::string_view source) {
 // successful ordinary C parse. As with defer scanning, false positives are
 // harmless because libclang validates the actual expansion later.
 inline bool may_contain_closure(std::string_view source) {
-  for (const auto name : {std::string_view{"recast_closure"}, std::string_view{"recast_call"},
-                          std::string_view{"recast_bind"}}) {
+  for (const auto name : {std::string_view{"recast_closure"}, std::string_view{"recast_bind"}}) {
     std::size_t position = 0;
     while ((position = source.find(name, position)) != source.npos) {
       if (is_keyword_at(source, position, name))

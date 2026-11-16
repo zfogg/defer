@@ -23,7 +23,7 @@ int main() {
       "int f(void) { int offset = 10; int total = 0; "
       "recast_closure(add, int, (int x), (copy(offset), ref(total)), "
       "{ DEFER(total += 100); int result = x + offset; total += result; return result; }); "
-      "return recast_call(add, 5) + total; }\n",
+      "return add(5) + total; }\n",
       {"-I" RECAST_TEST_INCLUDE, "-std=gnu17"});
   CHECK(closure.find("recast_closure") == std::string::npos);
   CHECK(closure.find("recast_call") == std::string::npos);
