@@ -359,9 +359,20 @@ function(recast_finish_batches)
                 string(APPEND _content "${_source}\t${_output}\n")
             endforeach()
             file(GENERATE OUTPUT "${_manifest}" CONTENT "${_content}")
+            if(WIN32)
+                set(_recast_cpath_separator ";")
+            else()
+                set(_recast_cpath_separator ":")
+            endif()
+            string(JOIN "${_recast_cpath_separator}" _recast_cpath
+                "${RECAST_SOURCE_ROOT}/deps/recast/include"
+                "${RECAST_SOURCE_ROOT}/include"
+                "${RECAST_SOURCE_ROOT}/lib"
+                "${RECAST_SOURCE_ROOT}/src"
+                "${RECAST_SOURCE_ROOT}/deps")
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "${CMAKE_COMMAND}" -E env
-                    "CPATH=${RECAST_SOURCE_ROOT}/deps/recast/include;${RECAST_SOURCE_ROOT}/include;${RECAST_SOURCE_ROOT}/lib;${RECAST_SOURCE_ROOT}/src;${RECAST_SOURCE_ROOT}/deps"
+                    "CPATH=${_recast_cpath}"
                     "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
