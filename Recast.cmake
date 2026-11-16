@@ -377,9 +377,10 @@ function(recast_finish_batches)
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
                     "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
-                    "$<TARGET_FILE:${_recast_tool_target}>" --batch "${_manifest}"
+                    "$<TARGET_FILE:${_recast_tool_target}>"
                     --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
                     --materialized-source-root "${RECAST_SOURCE_ROOT}"
+                    --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                 DEPENDS ${_sources} "${_manifest}" ${_recast_tool_target} "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
