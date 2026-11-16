@@ -7,12 +7,6 @@ set(RECAST_SOURCE_DIRS "include;lib;src;tests" CACHE STRING
   "Source directories relative to RECAST_SOURCE_ROOT")
 set(RECAST_BACKEND "NATIVE" CACHE STRING "Transformer backend")
 set(RECAST_HEADER_OVERLAYS "AUTO" CACHE STRING "Header overlays: AUTO, ON, or OFF")
-set(RECAST_NATIVE_BINARY "" CACHE FILEPATH "Host recast executable")
-if(NOT RECAST_NATIVE_BINARY)
-  set(RECAST_NATIVE_BINARY
-      "${CMAKE_BINARY_DIR}/bin/recast${CMAKE_EXECUTABLE_SUFFIX}"
-      CACHE FILEPATH "Host recast executable")
-endif()
 set(RECAST_SHARED_CACHE "" CACHE PATH "Shared transformation cache")
 set(RECAST_WRAPPER_HEADER_DIRS "" CACHE STRING "Additional wrapper header directories")
 set(RECAST_TRANSFORMS "all" CACHE STRING "Comma-separated Recast transforms used by CMake (all, defer, closures)")
@@ -595,28 +589,10 @@ function(recast_targets)
     message(FATAL_ERROR "recast_targets requires single-config Ninja or Unix Makefiles")
   endif()
   if(RECAST_BACKEND STREQUAL "NATIVE")
-    if(TARGET recast)
-      set(_recast_tool_target recast)
-    elseif(NOT EXISTS "${RECAST_NATIVE_BINARY}")
-      message(FATAL_ERROR
-        "Recast executable not found at ${RECAST_NATIVE_BINARY}. "
-        "Build Recast into the consuming project's bin directory or set "
-        "RECAST_NATIVE_BINARY explicitly.")
-    else()
-      set(_recast_tool_target recast-native)
+    if(NOT TARGET recast)
+      message(FATAL_ERROR "The native Recast target must be added before recast_targets()")
     endif()
-    if(NOT TARGET recast AND NOT TARGET recast-native)
-      add_executable(recast-native IMPORTED GLOBAL)
-      set_property(TARGET recast-native PROPERTY
-        IMPORTED_CONFIGURATIONS "DEBUG;RELEASE;RELWITHDEBINFO;MINSIZEREL")
-      set_property(TARGET recast-native PROPERTY IMPORTED_LOCATION "${RECAST_NATIVE_BINARY}")
-      # Multi-config generators (notably Visual Studio) resolve imported
-      # executables by configuration when used in generator expressions.
-      foreach(_recast_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
-        set_property(TARGET recast-native PROPERTY
-          "IMPORTED_LOCATION_${_recast_config}" "${RECAST_NATIVE_BINARY}")
-      endforeach()
-    endif()
+    set(_recast_tool_target recast)
   elseif(RECAST_BACKEND STREQUAL "PYTHON")
     if(NOT EXISTS "${RECAST_TOOL_ROOT}/python/defer.py")
       message(FATAL_ERROR "Set RECAST_TOOL_ROOT to a defer checkout for the Python backend")
