@@ -355,6 +355,7 @@ function(recast_finish_batches)
             file(GENERATE OUTPUT "${_manifest}" CONTENT "${_content}")
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "${CMAKE_COMMAND}" -E env
+                    "CPATH=${RECAST_SOURCE_ROOT}/deps/recast/include;${RECAST_SOURCE_ROOT}/include;${RECAST_SOURCE_ROOT}/lib;${RECAST_SOURCE_ROOT}/src;${RECAST_SOURCE_ROOT}/deps"
                     "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
