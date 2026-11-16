@@ -39,3 +39,9 @@ void __recast_defer_marker(void);
 #define defer_named(name, ...) do { } while (0)
 #define defer_cancel(name) do { } while (0)
 #endif
+
+/* Keep the historical lowercase spellings available to C sources that include
+ * the namespaced compatibility header. */
+#define defer(...) DEFER(__VA_ARGS__)
+#define defer_named(name, ...) DEFER_NAMED(name, __VA_ARGS__)
+#define defer_cancel(name) DEFER_CANCEL(name)
