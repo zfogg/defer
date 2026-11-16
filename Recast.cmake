@@ -1,10 +1,18 @@
 include_guard(GLOBAL)
+if(NOT RECAST_TOOL_ROOT)
+  get_filename_component(RECAST_TOOL_ROOT "${CMAKE_CURRENT_LIST_DIR}" DIRECTORY)
+endif()
 set(RECAST_SOURCE_ROOT "${CMAKE_SOURCE_DIR}" CACHE PATH "Root of sources to transform")
 set(RECAST_SOURCE_DIRS "include;lib;src;tests" CACHE STRING
   "Source directories relative to RECAST_SOURCE_ROOT")
 set(RECAST_BACKEND "NATIVE" CACHE STRING "Transformer backend")
 set(RECAST_HEADER_OVERLAYS "AUTO" CACHE STRING "Header overlays: AUTO, ON, or OFF")
 set(RECAST_NATIVE_BINARY "" CACHE FILEPATH "Host recast executable")
+if(NOT RECAST_NATIVE_BINARY)
+  set(RECAST_NATIVE_BINARY
+      "${CMAKE_BINARY_DIR}/bin/recast${CMAKE_EXECUTABLE_SUFFIX}"
+      CACHE FILEPATH "Host recast executable")
+endif()
 set(RECAST_SHARED_CACHE "" CACHE PATH "Shared transformation cache")
 set(RECAST_WRAPPER_HEADER_DIRS "" CACHE STRING "Additional wrapper header directories")
 set(RECAST_TRANSFORMS "all" CACHE STRING "Comma-separated Recast transforms used by CMake (all, defer, closures)")
@@ -364,11 +372,11 @@ function(recast_finish_batches)
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
                     "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
+                    "$<TARGET_FILE:${_recast_tool_target}>" --batch "${_manifest}"
                     --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
                     --materialized-source-root "${RECAST_SOURCE_ROOT}"
-                    "$<TARGET_FILE:recast-native>" --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
-                DEPENDS ${_sources} "${_manifest}" recast-native "${CMAKE_BINARY_DIR}/compile_commands.json"
+                DEPENDS ${_sources} "${_manifest}" ${_recast_tool_target} "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
             add_custom_target("recast-${_id}" DEPENDS ${_outputs} ${_stamps} ${_overlays})
             add_dependencies(recast-materialized-headers "recast-${_id}")
@@ -587,11 +595,20 @@ function(recast_targets)
     message(FATAL_ERROR "recast_targets requires single-config Ninja or Unix Makefiles")
   endif()
   if(RECAST_BACKEND STREQUAL "NATIVE")
-    if(NOT RECAST_NATIVE_BINARY)
-      find_program(RECAST_NATIVE_BINARY NAMES recast REQUIRED)
+    if(TARGET recast)
+      set(_recast_tool_target recast)
+    elseif(NOT EXISTS "${RECAST_NATIVE_BINARY}")
+      message(FATAL_ERROR
+        "Recast executable not found at ${RECAST_NATIVE_BINARY}. "
+        "Build Recast into the consuming project's bin directory or set "
+        "RECAST_NATIVE_BINARY explicitly.")
+    else()
+      set(_recast_tool_target recast-native)
     endif()
-    if(NOT TARGET recast-native)
+    if(NOT TARGET recast AND NOT TARGET recast-native)
       add_executable(recast-native IMPORTED GLOBAL)
+      set_property(TARGET recast-native PROPERTY
+        IMPORTED_CONFIGURATIONS "DEBUG;RELEASE;RELWITHDEBINFO;MINSIZEREL")
       set_property(TARGET recast-native PROPERTY IMPORTED_LOCATION "${RECAST_NATIVE_BINARY}")
       # Multi-config generators (notably Visual Studio) resolve imported
       # executables by configuration when used in generator expressions.
