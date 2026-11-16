@@ -333,6 +333,9 @@ endfunction()
 function(recast_finish_batches)
     get_property(_header_active GLOBAL PROPERTY RECAST_HEADER_ACTIVE)
     if(RECAST_BACKEND STREQUAL "NATIVE")
+        if(NOT TARGET recast-materialized-headers)
+            add_custom_target(recast-materialized-headers)
+        endif()
         get_property(_ids GLOBAL PROPERTY RECAST_BATCH_IDS)
         list(REMOVE_DUPLICATES _ids)
         foreach(_id IN LISTS _ids)
@@ -360,11 +363,14 @@ function(recast_finish_batches)
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
                     "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
+                    --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
+                    --materialized-source-root "${RECAST_SOURCE_ROOT}"
                     "$<TARGET_FILE:recast-native>" --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                 DEPENDS ${_sources} "${_manifest}" recast-native "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
             add_custom_target("recast-${_id}" DEPENDS ${_outputs} ${_stamps} ${_overlays})
+            add_dependencies(recast-materialized-headers "recast-${_id}")
             if(_prerequisites)
                 add_dependencies("recast-${_id}" ${_prerequisites})
             endif()
