@@ -1,6 +1,7 @@
 include_guard(GLOBAL)
 set(RECAST_SOURCE_ROOT "${CMAKE_SOURCE_DIR}" CACHE PATH "Root of sources to transform")
-set(RECAST_SOURCE_DIRS "." CACHE STRING "Source directories relative to RECAST_SOURCE_ROOT")
+set(RECAST_SOURCE_DIRS "include;lib;src;tests" CACHE STRING
+  "Source directories relative to RECAST_SOURCE_ROOT")
 set(RECAST_BACKEND "NATIVE" CACHE STRING "Transformer backend")
 set(RECAST_HEADER_OVERLAYS "AUTO" CACHE STRING "Header overlays: AUTO, ON, or OFF")
 set(RECAST_NATIVE_BINARY "" CACHE FILEPATH "Host recast executable")
