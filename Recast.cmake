@@ -366,7 +366,7 @@ function(recast_finish_batches)
                     "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
                     --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
                     --materialized-source-root "${RECAST_SOURCE_ROOT}"
-                    "$<TARGET_FILE:recast-native>" --batch "${_manifest}"
+                    "$<TARGET_FILE:recast>" --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                 DEPENDS ${_sources} "${_manifest}" recast-native "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
