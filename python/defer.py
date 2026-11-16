@@ -232,8 +232,9 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
                 normalized.append("-D" + value[2:])
             elif value.startswith("/FI") and len(value) > 3:
                 normalized.extend(("-include", value[3:]))
-            elif value.startswith("/std:"):
-                normalized.append("-std=" + ("c2x" if value[5:].lower() == "clatest" else value[5:]))
+            elif value.startswith(("/std:", "-std:")):
+                standard = value[5:]
+                normalized.append("-std=" + ("c2x" if standard.lower() == "clatest" else standard))
             elif value.startswith("-clang:"):
                 normalized.append(value[7:])
             elif value.lower() in ("/experimental:c11atomics", "/permissive-", "/fs", "/od", "/zi", "/w4", "/mdd", "/md", "/rtc1", "/ehsc", "/ob0"):
