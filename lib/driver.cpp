@@ -748,6 +748,16 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
       roots.push_back(
           llvm::json::Object{{"type", "file"}, {"name", alias}, {"external-contents", header.generic_u8string()}});
     generated.emplace_back(header, text);
+    if (!options.materialized_headers_root.empty() && !options.materialized_source_root.empty()) {
+      const auto original = fs::weakly_canonical(fs::u8path(name));
+      const auto relative = original.lexically_relative(fs::weakly_canonical(options.materialized_source_root));
+      if (relative.empty() || *relative.begin() == "..")
+        throw std::runtime_error("transformed header is outside the materialized SDK root: " + name);
+      const auto materialized = options.materialized_headers_root / relative;
+      if (conflicts(materialized))
+        throw std::runtime_error("materialized header would overwrite an input or output: " + materialized.u8string());
+      write_if_changed(materialized, text);
+    }
   }
   llvm::json::Object mapping{{"version", 0}, {"use-external-names", false}, {"roots", std::move(roots)}};
   const auto json = llvm::formatv("{0:2}", llvm::json::Value(std::move(mapping))).str();

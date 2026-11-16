@@ -93,6 +93,10 @@ llvm::cl::opt<std::string> shared_cache(
     llvm::cl::init(environment_string("RECAST_SHARED_CACHE")));
 llvm::cl::opt<std::string> header_overlay("header-overlay",
                                           llvm::cl::desc("Write an experimental per-source Clang header overlay"));
+llvm::cl::opt<std::string> materialized_headers_root(
+    "materialized-headers-root", llvm::cl::desc("Write transformed headers under this SDK root"));
+llvm::cl::opt<std::string> materialized_source_root(
+    "materialized-source-root", llvm::cl::desc("Source root used for materialized header paths"));
 llvm::cl::opt<bool>
     header_overlays("header-overlays",
                     llvm::cl::desc("Write an experimental Clang header overlay for every batch source"),
@@ -419,6 +423,10 @@ int main(int argc, char **argv) {
     options.enable_closures = enabled_transforms.count("closures") != 0;
     if (!header_overlay.empty())
       options.header_overlay = std::filesystem::absolute(std::filesystem::u8path(header_overlay.getValue()));
+    if (!materialized_headers_root.empty())
+      options.materialized_headers_root = std::filesystem::absolute(std::filesystem::u8path(materialized_headers_root.getValue()));
+    if (!materialized_source_root.empty())
+      options.materialized_source_root = std::filesystem::absolute(std::filesystem::u8path(materialized_source_root.getValue()));
     if (!compilation_database.empty())
       options.compilation_database =
           std::filesystem::absolute(std::filesystem::u8path(compilation_database.getValue()));

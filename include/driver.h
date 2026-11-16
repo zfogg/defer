@@ -12,6 +12,8 @@ namespace defer_tool {
 struct DriverOptions {
   std::filesystem::path compilation_database;
   std::filesystem::path header_overlay;
+  std::filesystem::path materialized_headers_root;
+  std::filesystem::path materialized_source_root;
   std::vector<std::filesystem::path> protected_paths;
   std::vector<std::string> clang_arguments;
   bool preamble = false;
