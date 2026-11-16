@@ -585,7 +585,8 @@ bool validate_header_overlay(const fs::path &overlay, const FileDependencies &fi
 static FileDependencies transform_with_header_overlay(ClangIndex &index, const fs::path &source, const fs::path &output,
                                                       const std::vector<const char *> &arguments,
                                                       const fs::path &overlay,
-                                                      const std::vector<fs::path> &protected_paths, bool objc) {
+                                                      const std::vector<fs::path> &protected_paths,
+                                                      const DriverOptions &options, bool objc) {
   const auto source_name = source.u8string();
   const auto source_identity = fs::weakly_canonical(source);
   std::map<std::string, std::string> contents{{source_name, read_file(source)}};
@@ -866,7 +867,7 @@ FileDependencies transform_file(ClangIndex &index, const fs::path &source_path, 
     for (const auto &arg : arguments)
       raw.push_back(arg.c_str());
     return transform_with_header_overlay(index, source, output, raw, options.header_overlay, options.protected_paths,
-                                         objc);
+                                         options, objc);
   }
   auto result = transform_content(index, source, output, read_file(source), options);
   write_if_changed(output, result.contents);
