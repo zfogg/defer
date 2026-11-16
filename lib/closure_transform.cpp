@@ -167,12 +167,14 @@ std::string replace_captures(std::string_view body, const std::map<std::string, 
 std::string transform_closures(const std::string &source) {
   std::vector<Closure> closures;
   for (std::size_t cursor = 0;;) {
-    const auto marker = source.find("closure", cursor);
+    auto marker = source.find("closure", cursor);
     if (marker == std::string::npos) break;
-    auto invocation = marker + 7;
+    const bool namespaced = marker >= 7 && source.compare(marker - 7, 7, "recast_") == 0;
+    if (namespaced) marker -= 7;
+    auto invocation = marker + (namespaced ? 14 : 7);
     while (invocation < source.size() && std::isspace(static_cast<unsigned char>(source[invocation]))) ++invocation;
     if (invocation >= source.size() || source[invocation] != '(') {
-      cursor = marker + 7;
+      cursor = marker + (namespaced ? 14 : 7);
       continue;
     }
     const auto line_start = source.rfind('\n', marker);
@@ -220,6 +222,24 @@ std::string transform_closures(const std::string &source) {
   for (auto it = closures.rbegin(); it != closures.rend(); ++it) {
     output.replace(it->begin, it->end - it->begin, "");
   }
+  // Normalize namespaced calls before lowering each closure. The source-level
+  // spelling avoids collisions with ordinary project macros, while the
+  // transformed output is a direct call expression.
+  for (std::size_t pos = 0; (pos = output.find("recast_call(", pos)) != std::string::npos;) {
+    const auto open = output.find('(', pos);
+    const auto close = matching(output, open, '(', ')');
+    const auto parts = comma_parts(std::string_view(output).substr(open + 1, close - open - 1));
+    if (parts.size() < 2) throw std::runtime_error("Recast call requires a closure name and arguments");
+    std::string call = trim(parts.front()) + "(";
+    for (std::size_t i = 1; i < parts.size(); ++i) {
+      if (i > 1) call += ", ";
+      call += trim(parts[i]);
+    }
+    call += ")";
+    output.replace(pos, close - pos + 1, call);
+    pos += call.size();
+  }
+
   for (const auto &closure : closures) {
     std::map<std::string, std::string> names;
     for (const auto &capture : closure.captures) {
