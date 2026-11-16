@@ -397,6 +397,10 @@ void Transformer::visit_block(CXCursor cursor, CXCursorKind parent) {
         const auto block_children = children(cursor);
         if (!block_children.empty()) cleanup_position = begin(block_children.back());
       }
+      if (parent == CXCursor_FunctionDecl && !function_void_ && !objc_) {
+        const auto fallback = "__defer_fallback_" + std::to_string(start);
+        normal_cleanup += " " + return_type_ + " " + fallback + " = {0}; return " + fallback + ";";
+      }
       edits_.push_back({cleanup_position, cleanup_position, normal_cleanup});
     }
   }
