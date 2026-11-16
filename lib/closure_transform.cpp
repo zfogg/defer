@@ -241,8 +241,6 @@ std::string transform_closures(const std::string &source) {
   }
 
   for (const auto &closure : closures) {
-    if (closure.result != "void")
-      throw std::runtime_error("Recast non-void closures require a portable result lowering");
     std::map<std::string, std::string> names;
     for (const auto &capture : closure.captures) {
       names.emplace(capture.name, capture.name);
