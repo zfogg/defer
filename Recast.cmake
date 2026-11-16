@@ -586,6 +586,12 @@ function(recast_targets)
     if(NOT TARGET recast-native)
       add_executable(recast-native IMPORTED GLOBAL)
       set_property(TARGET recast-native PROPERTY IMPORTED_LOCATION "${RECAST_NATIVE_BINARY}")
+      # Multi-config generators (notably Visual Studio) resolve imported
+      # executables by configuration when used in generator expressions.
+      foreach(_recast_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        set_property(TARGET recast-native PROPERTY
+          "IMPORTED_LOCATION_${_recast_config}" "${RECAST_NATIVE_BINARY}")
+      endforeach()
     endif()
   elseif(RECAST_BACKEND STREQUAL "PYTHON")
     if(NOT EXISTS "${RECAST_TOOL_ROOT}/python/defer.py")
