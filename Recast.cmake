@@ -1,6 +1,7 @@
 include_guard(GLOBAL)
 set(RECAST_SOURCE_ROOT "${CMAKE_SOURCE_DIR}" CACHE PATH "Root of sources to transform")
-set(RECAST_SOURCE_DIRS "." CACHE STRING "Source directories relative to RECAST_SOURCE_ROOT")
+set(RECAST_SOURCE_DIRS "include;lib;src;tests" CACHE STRING
+  "Source directories relative to RECAST_SOURCE_ROOT")
 set(RECAST_BACKEND "NATIVE" CACHE STRING "Transformer backend")
 set(RECAST_HEADER_OVERLAYS "AUTO" CACHE STRING "Header overlays: AUTO, ON, or OFF")
 set(RECAST_NATIVE_BINARY "" CACHE FILEPATH "Host recast executable")
@@ -592,6 +593,12 @@ function(recast_targets)
     if(NOT TARGET recast-native)
       add_executable(recast-native IMPORTED GLOBAL)
       set_property(TARGET recast-native PROPERTY IMPORTED_LOCATION "${RECAST_NATIVE_BINARY}")
+      # Multi-config generators (notably Visual Studio) resolve imported
+      # executables by configuration when used in generator expressions.
+      foreach(_recast_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        set_property(TARGET recast-native PROPERTY
+          "IMPORTED_LOCATION_${_recast_config}" "${RECAST_NATIVE_BINARY}")
+      endforeach()
     endif()
   elseif(RECAST_BACKEND STREQUAL "PYTHON")
     if(NOT EXISTS "${RECAST_TOOL_ROOT}/python/defer.py")
