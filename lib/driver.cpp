@@ -105,8 +105,8 @@ std::size_t exact_command_count(const fs::path &directory, CXCompilationDatabase
     if (commands) {
       for (unsigned i = 0; i < clang_CompileCommands_getSize(commands); ++i) {
         const auto command = clang_CompileCommands_getCommand(commands, i);
-        const auto workdir = fs::u8path(consume_string(clang_CompileCommand_getDirectory(command)));
-        const auto source = fs::u8path(consume_string(clang_CompileCommand_getFilename(command)));
+        const auto workdir = fs::path(consume_string(clang_CompileCommand_getDirectory(command)));
+        const auto source = fs::path(consume_string(clang_CompileCommand_getFilename(command)));
         const auto absolute = fs::absolute(workdir / source);
         const auto parent_key = absolute_path_key(absolute.parent_path());
         auto parent = canonical_parents.find(parent_key);
@@ -131,7 +131,7 @@ std::string compiler_query(const std::string &compiler, const std::string &optio
   static std::map<std::string, std::string> cached;
   static std::mutex cache_mutex;
   std::lock_guard<std::mutex> lock(cache_mutex);
-  const auto key = fs::absolute(fs::u8path(compiler)).u8string() + "\n" + option;
+  const auto key = fs::absolute(fs::path(compiler)).u8string() + "\n" + option;
   if (cached.count(key))
     return cached.at(key);
   auto program = llvm::sys::findProgramByName(compiler);
@@ -149,14 +149,14 @@ std::string compiler_query(const std::string &compiler, const std::string &optio
   const int result = llvm::sys::ExecuteAndWait(*program, arguments, std::nullopt, redirects);
   std::string resource;
   try {
-    resource = read_file(fs::u8path(temp_path));
+    resource = read_file(fs::path(temp_path));
   } catch (...) {
     std::error_code ignored;
-    fs::remove(fs::u8path(temp_path), ignored);
+    fs::remove(fs::path(temp_path), ignored);
     throw;
   }
   std::error_code ignored;
-  fs::remove(fs::u8path(temp_path), ignored);
+  fs::remove(fs::path(temp_path), ignored);
   while (!resource.empty() && (resource.back() == '\n' || resource.back() == '\r' || resource.back() == ' '))
     resource.pop_back();
   if (result != 0 || resource.empty())
@@ -202,7 +202,7 @@ std::vector<std::string> emscripten_driver_defaults(const std::string &compiler)
   }
   if (sysroot.empty())
     throw std::runtime_error("Emscripten did not report a sysroot: " + compiler);
-  if (!fs::exists(fs::u8path(sysroot) / "include" / "emscripten" / "emscripten.h")) {
+  if (!fs::exists(fs::path(sysroot) / "include" / "emscripten" / "emscripten.h")) {
     const auto program = llvm::sys::findProgramByName(compiler);
     if (!program)
       throw std::runtime_error("cannot find compiler: " + compiler);
@@ -219,7 +219,7 @@ std::vector<std::string> emscripten_driver_defaults(const std::string &compiler)
 std::string default_macos_sdk() {
   static const std::string sdk = [] {
     if (const auto root = llvm::sys::Process::GetEnv("SDKROOT"))
-      if (!root->empty() && *root != "/" && fs::is_directory(fs::u8path(*root)))
+      if (!root->empty() && *root != "/" && fs::is_directory(fs::path(*root)))
         return *root;
     auto program = llvm::sys::findProgramByName("xcrun");
     if (!program)
@@ -235,9 +235,9 @@ std::string default_macos_sdk() {
     const int result = llvm::sys::ExecuteAndWait(*program, args, std::nullopt, redirects);
     std::string root;
     if (result == 0)
-      root = read_file(fs::u8path(path));
+      root = read_file(fs::path(path));
     std::error_code ignored;
-    fs::remove(fs::u8path(path), ignored);
+    fs::remove(fs::path(path), ignored);
     while (!root.empty() && (root.back() == '\n' || root.back() == '\r' || root.back() == ' '))
       root.pop_back();
     return root;
@@ -272,8 +272,8 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   if (args.empty())
     throw std::runtime_error("empty compile command for " + generated.u8string());
   const auto compiler = args.front();
-  const auto working_directory = fs::u8path(directory);
-  const auto generated_overlay = fs::u8path(generated.parent_path().u8string() + ".vfs.json");
+  const auto working_directory = fs::path(directory);
+  const auto generated_overlay = fs::path(generated.parent_path().u8string() + ".vfs.json");
   std::vector<std::string> result = {"-working-directory", directory, "-iquote", source.parent_path().u8string()};
   const bool emscripten = compiler.find("emcc") != std::string::npos || compiler.find("em++") != std::string::npos;
   if (emscripten) {
@@ -295,12 +295,12 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       continue;
     }
     if (value == "-ivfsoverlay" && i + 1 < args.size() &&
-        fs::weakly_canonical(working_directory / fs::u8path(args[i + 1])) == fs::weakly_canonical(generated_overlay)) {
+        fs::weakly_canonical(working_directory / fs::path(args[i + 1])) == fs::weakly_canonical(generated_overlay)) {
       i += 2;
       continue;
     }
     if (value == "-clang:-ivfsoverlay" && i + 1 < args.size() && args[i + 1].rfind("-clang:", 0) == 0 &&
-        fs::weakly_canonical(working_directory / fs::u8path(args[i + 1].substr(7))) ==
+        fs::weakly_canonical(working_directory / fs::path(args[i + 1].substr(7))) ==
             fs::weakly_canonical(generated_overlay)) {
       i += 2;
       continue;
@@ -330,8 +330,8 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     }
     if (value == "--" || value == "-c" || value == "/c" || value == "-MD" || value == "-MMD" || value == "-MP" ||
         (!value.empty() && value[0] != '-' &&
-         (absolute_path_key(working_directory / fs::u8path(value)) == absolute_path_key(selected) ||
-          database_path_key(working_directory / fs::u8path(value)) == database_path_key(selected)))) {
+         (absolute_path_key(working_directory / fs::path(value)) == absolute_path_key(selected) ||
+          database_path_key(working_directory / fs::path(value)) == database_path_key(selected)))) {
       ++i;
       continue;
     }
@@ -344,7 +344,7 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
   if (!gcc_driver && !msvc_driver &&
       std::none_of(result.begin(), result.end(), [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; })) {
-    auto compiler_path = fs::u8path(compiler);
+    auto compiler_path = fs::path(compiler);
     if (compiler_path.is_relative() && compiler_path.has_parent_path())
       compiler_path = (working_directory / compiler_path).lexically_normal();
     result.push_back("-resource-dir");
@@ -435,7 +435,7 @@ fs::path loaded_libclang_path() {
   auto executable = llvm::sys::fs::getMainExecutable(nullptr, reinterpret_cast<void *>(&loaded_libclang_path));
   if (executable.empty())
     throw std::runtime_error("cannot determine executable path for static libclang");
-  return fs::u8path(executable);
+  return fs::path(executable);
 #else
   fs::path loaded;
 #ifdef _WIN32
@@ -453,7 +453,7 @@ fs::path loaded_libclang_path() {
   Dl_info info{};
   if (!dladdr(reinterpret_cast<const void *>(&clang_createIndex), &info) || !info.dli_fname)
     throw std::runtime_error("cannot determine the loaded libclang path");
-  loaded = fs::u8path(info.dli_fname);
+  loaded = fs::path(info.dli_fname);
 #endif
   return loaded;
 #endif
@@ -496,7 +496,7 @@ void write_if_changed(const fs::path &path, const std::string &contents) {
   if (fs::exists(path) && read_file(path) == contents)
     return;
   const auto temporary =
-      fs::u8path(path.u8string() + "." + std::to_string(llvm::sys::Process::getProcessId()) + ".tmp");
+      fs::path(path.u8string() + "." + std::to_string(llvm::sys::Process::getProcessId()) + ".tmp");
   {
     std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
     if (!file || !file.write(contents.data(), static_cast<std::streamsize>(contents.size())))
@@ -534,7 +534,7 @@ static std::string header_overlay_hash(const std::string &name, const std::strin
 
 static void check_output_dependencies(const FileDependencies &file) {
   for (const auto &name : file.inputs) {
-    const auto input = fs::u8path(name);
+    const auto input = fs::path(name);
     std::error_code error;
     if (fs::weakly_canonical(file.output) == fs::weakly_canonical(input) ||
         (fs::exists(file.output) && fs::exists(input) && fs::equivalent(file.output, input, error) && !error))
@@ -557,7 +557,7 @@ bool validate_header_overlay(const fs::path &overlay, const FileDependencies &fi
       return false;
     std::set<fs::path> inputs, seen;
     for (const auto &name : file.inputs)
-      inputs.insert(fs::weakly_canonical(fs::u8path(name)));
+      inputs.insert(fs::weakly_canonical(fs::path(name)));
     for (const auto &entry : *roots) {
       auto *root = entry.getAsObject();
       if (!root || root->getString("type") != "file")
@@ -566,13 +566,13 @@ bool validate_header_overlay(const fs::path &overlay, const FileDependencies &fi
       const auto external = root->getString("external-contents");
       if (!name || !external)
         return false;
-      const auto logical = fs::absolute(fs::u8path(name->str())).lexically_normal();
+      const auto logical = fs::absolute(fs::path(name->str())).lexically_normal();
       const auto original = fs::weakly_canonical(logical);
       if (!inputs.count(original) || !seen.insert(logical).second)
         return false;
-      const auto generated = fs::u8path(external->str());
+      const auto generated = fs::path(external->str());
       const auto text = read_file(generated);
-      const auto expected = fs::u8path(overlay.u8string() + ".headers") /
+      const auto expected = fs::path(overlay.u8string() + ".headers") /
                             (header_overlay_hash(original.generic_u8string(), text) + original.extension().u8string());
       if (fs::weakly_canonical(generated) != fs::weakly_canonical(expected))
         return false;
@@ -606,7 +606,7 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
   fs::path working_directory = fs::current_path();
   for (std::size_t i = 0; i + 1 < arguments.size(); ++i)
     if (std::string_view(arguments[i]) == "-working-directory")
-      working_directory = fs::u8path(arguments[i + 1]);
+      working_directory = fs::path(arguments[i + 1]);
   for (std::size_t i = 0; i < arguments.size(); ++i) {
     const std::string_view arg(arguments[i]);
     std::string path;
@@ -615,7 +615,7 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
     else if (arg.size() > 2 && arg.substr(0, 2) == "-I")
       path = std::string(arg.substr(2));
     if (!path.empty()) {
-      const auto parsed = fs::u8path(path);
+      const auto parsed = fs::path(path);
       add_root(parsed.is_absolute() ? parsed : working_directory / parsed);
     }
   }
@@ -635,7 +635,7 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
         clang_getExpansionLocation(clang_getCursorLocation(cursor), &file, nullptr, nullptr, nullptr);
         if (file) {
           const auto display = consume_string(clang_getFileName(file));
-          const auto logical = fs::absolute(fs::u8path(display)).lexically_normal();
+          const auto logical = fs::absolute(fs::path(display)).lexically_normal();
           const auto canonical = fs::weakly_canonical(logical);
           const auto key = canonical == source_identity ? source_name : canonical.u8string();
           marker_files.insert(key);
@@ -661,7 +661,7 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
     collect(clang_getTranslationUnitCursor(unit->get()));
     bool changed = false;
     for (const auto &name : marker_files) {
-      const auto path = fs::u8path(name);
+      const auto path = fs::path(name);
       if (path != source && path.extension() != ".h" && path.extension() != ".hpp" && path.extension() != ".hh" &&
           path.extension() != ".hxx" && path.extension() != ".inc" && path.extension() != ".def")
         throw std::runtime_error("defer in included non-header files is not supported: " + name);
@@ -691,7 +691,7 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
       unit->get(),
       [](CXFile file, CXSourceLocation *, unsigned, CXClientData opaque) {
         auto *files = static_cast<std::set<std::string> *>(opaque);
-        files->insert(fs::absolute(fs::u8path(consume_string(clang_getFileName(file)))).lexically_normal().u8string());
+        files->insert(fs::absolute(fs::path(consume_string(clang_getFileName(file)))).lexically_normal().u8string());
       },
       &dependencies.inputs);
   check_output_dependencies(dependencies);
@@ -716,7 +716,7 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
         (fs::exists(candidate) && fs::exists(output) && fs::equivalent(candidate, output, error) && !error))
       return true;
     for (const auto &name : dependencies.inputs) {
-      const auto original = fs::u8path(name);
+      const auto original = fs::path(name);
       error.clear();
       if (fs::weakly_canonical(candidate) == fs::weakly_canonical(original) ||
           (fs::exists(candidate) && fs::exists(original) && fs::equivalent(candidate, original, error) && !error))
@@ -737,9 +737,9 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
   for (const auto &[name, text] : transformed) {
     if (name == source_name)
       continue;
-    const auto header_name = fs::u8path(name).generic_u8string();
-    const auto header = fs::u8path(overlay.u8string() + ".headers") /
-                        (header_overlay_hash(header_name, text) + fs::u8path(name).extension().u8string());
+    const auto header_name = fs::path(name).generic_u8string();
+    const auto header = fs::path(overlay.u8string() + ".headers") /
+                        (header_overlay_hash(header_name, text) + fs::path(name).extension().u8string());
     std::error_code error;
     if (conflicts(header) || fs::weakly_canonical(header) == fs::weakly_canonical(overlay) ||
         (fs::exists(header) && fs::exists(overlay) && fs::equivalent(header, overlay, error) && !error))
@@ -751,7 +751,7 @@ static FileDependencies transform_with_header_overlay(ClangIndex &index, const f
           llvm::json::Object{{"type", "file"}, {"name", alias}, {"external-contents", header.generic_u8string()}});
     generated.emplace_back(header, text);
     if (!options.materialized_headers_root.empty() && !options.materialized_source_root.empty()) {
-      const auto original = fs::weakly_canonical(fs::u8path(name));
+      const auto original = fs::weakly_canonical(fs::path(name));
       const auto relative = original.lexically_relative(fs::weakly_canonical(options.materialized_source_root));
       if (relative.empty() || *relative.begin() == "..")
         throw std::runtime_error("transformed header is outside the materialized SDK root: " + name);
@@ -803,7 +803,7 @@ TransformResult transform_content(ClangIndex &index, const fs::path &source_path
         [](CXFile file, CXSourceLocation *, unsigned, CXClientData opaque) {
           auto *files = static_cast<std::set<std::string> *>(opaque);
           files->insert(
-              fs::absolute(fs::u8path(consume_string(clang_getFileName(file)))).lexically_normal().u8string());
+              fs::absolute(fs::path(consume_string(clang_getFileName(file)))).lexically_normal().u8string());
         },
         &dependencies.inputs);
     if (!output.empty())
@@ -828,7 +828,7 @@ TransformResult transform_content(ClangIndex &index, const fs::path &source_path
       unit->get(),
       [](CXFile file, CXSourceLocation *, unsigned, CXClientData opaque) {
         auto *files = static_cast<std::set<std::string> *>(opaque);
-        files->insert(fs::absolute(fs::u8path(consume_string(clang_getFileName(file)))).lexically_normal().u8string());
+        files->insert(fs::absolute(fs::path(consume_string(clang_getFileName(file)))).lexically_normal().u8string());
       },
       &dependencies.inputs);
   if (!output.empty())
@@ -914,10 +914,10 @@ void write_depfile(const fs::path &path, const std::vector<FileDependencies> &fi
 }
 
 void write_dependency_stamp(const FileDependencies &file) {
-  const auto stamp = fs::u8path(file.output.parent_path().u8string() + ".deps");
+  const auto stamp = fs::path(file.output.parent_path().u8string() + ".deps");
   std::string contents;
   for (const auto &name : file.inputs) {
-    const auto path = fs::u8path(name);
+    const auto path = fs::path(name);
     std::error_code error;
     if (fs::weakly_canonical(stamp) == fs::weakly_canonical(path) ||
         (fs::exists(stamp) && fs::equivalent(stamp, path, error) && !error))
