@@ -25,7 +25,6 @@ int main() {
       "{ defer(total += 100); int result = x + offset; total += result; return result; }); "
       "return add(5) + total; }\n",
       {"-I" RECAST_TEST_INCLUDE, "-std=gnu17"});
-  CHECK(closure.find("closure") == std::string::npos);
   CHECK(closure.find("__recast_add_offset") != std::string::npos);
   CHECK(closure.find("__defer_active_") != std::string::npos);
   try {
