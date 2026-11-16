@@ -42,8 +42,12 @@
 
 namespace {
 const char *environment_value(const char *name) {
-  const char *value = std::getenv(name);
-  return value && *value ? value : nullptr;
+  static thread_local std::string value;
+  const auto environment = llvm::sys::Process::GetEnv(name);
+  if (!environment || environment->empty())
+    return nullptr;
+  value = *environment;
+  return value.c_str();
 }
 
 std::string environment_string(const char *name, std::string fallback = {}) {
