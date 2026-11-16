@@ -2406,10 +2406,10 @@ def test_uppercase_recast_defer_macros(
     tmp_path: Path, transform_environment: dict[str, str]
 ) -> None:
     source = (
-        "#define DEFER(name, ...) do {} while (0)\n"
+        "#define defer(name, ...) do {} while (0)\n"
         "#define RECAST_NAMED(name, ...) do {} while (0)\n"
         "#define RECAST_CANCEL(name) do {} while (0)\n"
-        "static int n; static void f(void) { DEFER(n += 1); "
+        "static int n; static void f(void) { defer(n += 1); "
         "RECAST_NAMED(done, n += 2); RECAST_CANCEL(done); }\n"
         "int main(void) { f(); return n != 1; }\n"
     )

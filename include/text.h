@@ -63,19 +63,19 @@ inline bool may_contain_defer(std::string_view source) {
     unspliced += source[i++];
   }
   source = unspliced;
-  if (source.find("DEFER") != source.npos)
+  if (source.find("defer") != source.npos)
     return true;
   std::size_t search = 0;
-  while ((search = source.find("DEFER", search)) != source.npos) {
+  while ((search = source.find("defer", search)) != source.npos) {
     const auto start = search++;
     if (start && is_identifier_byte(static_cast<unsigned char>(source[start - 1])))
       continue;
     std::size_t pos;
-    if (is_keyword_at(source, start, "DEFER_NAMED"))
+    if (is_keyword_at(source, start, "defer_named"))
       pos = start + 11;
-    else if (is_keyword_at(source, start, "DEFER_CANCEL"))
+    else if (is_keyword_at(source, start, "defer_cancel"))
       pos = start + 12;
-    else if (is_keyword_at(source, start, "DEFER"))
+    else if (is_keyword_at(source, start, "defer"))
       pos = start + 5;
     else
       continue;
@@ -139,7 +139,7 @@ inline bool may_contain_defer(std::string_view source) {
 // successful ordinary C parse. As with defer scanning, false positives are
 // harmless because libclang validates the actual expansion later.
 inline bool may_contain_closure(std::string_view source) {
-  for (const auto name : {std::string_view{"recast_closure"}, std::string_view{"recast_bind"}}) {
+  for (const auto name : {std::string_view{"closure"}, std::string_view{"bind"}}) {
     std::size_t position = 0;
     while ((position = source.find(name, position)) != source.npos) {
       if (is_keyword_at(source, position, name))

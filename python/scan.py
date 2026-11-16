@@ -14,11 +14,11 @@ def main() -> int:
     cast(io.TextIOWrapper, sys.stdin).reconfigure(encoding="utf-8")
     cast(io.TextIOWrapper, sys.stdout).reconfigure(encoding="utf-8")
     names = (Path(sys.argv[1]).read_bytes().splitlines() if len(sys.argv) > 1
-             else [b"DEFER", b"DEFER_NAMED", b"DEFER_CANCEL",
+             else [b"defer", b"defer_named", b"defer_cancel",
                    b"defer", b"defer_named", b"defer_cancel"])
     alternatives = b"|".join(re.escape(name) for name in names if name)
     pattern = re.compile(
-        rb"(?<![A-Za-z0-9_])(?:" + alternatives + rb"|[A-Za-z_][A-Za-z0-9_]*DEFER[A-Za-z0-9_]*)(?![A-Za-z0-9_])",
+        rb"(?<![A-Za-z0-9_])(?:" + alternatives + rb"|[A-Za-z_][A-Za-z0-9_]*defer[A-Za-z0-9_]*)(?![A-Za-z0-9_])",
     )
     for name in sys.stdin.read().splitlines():
         if not name:

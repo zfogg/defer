@@ -37,9 +37,9 @@ private:
 template <typename F> guard<F> make_guard(F action) { return guard<F>(static_cast<F &&>(action)); }
 } // namespace defer_detail
 } // extern "C++"
-#define DEFER_JOIN_IMPL(a, b) a##b
-#define DEFER_JOIN(a, b) DEFER_JOIN_IMPL(a, b)
-#define defer(...) auto DEFER_JOIN(__defer_guard_, __COUNTER__) = ::defer_detail::make_guard([&]() { __VA_ARGS__; })
+#define defer_join_impl(a, b) a##b
+#define defer_join(a, b) defer_join_impl(a, b)
+#define defer(...) auto defer_join(__defer_guard_, __COUNTER__) = ::defer_detail::make_guard([&]() { __VA_ARGS__; })
 #define defer_named(name, ...) auto name = ::defer_detail::make_guard([&]() { __VA_ARGS__; })
 #define defer_cancel(name) (name).cancel()
 #elif defined(RECAST_DEFER_PARSING) && !defined(__cplusplus)
@@ -58,16 +58,16 @@ void __defer_marker(void);
   } while (0)
 #elif defined(__OBJC__)
 #ifdef __cplusplus
-#define DEFER_OBJC_UNSUPPORTED                                                                                         \
+#define defer_objc_unsupported                                                                                         \
   static_assert(false, "defer() requires Objective-C++ zero-cost exceptions to be supported and enabled")
 #else
-#define DEFER_OBJC_UNSUPPORTED _Static_assert(0, "defer() requires the source transformation")
+#define defer_objc_unsupported _Static_assert(0, "defer() requires the source transformation")
 #endif
-#define defer(...) DEFER_OBJC_UNSUPPORTED
-#define defer_named(name, ...) DEFER_OBJC_UNSUPPORTED
-#define defer_cancel(name) DEFER_OBJC_UNSUPPORTED
+#define defer(...) defer_objc_unsupported
+#define defer_named(name, ...) defer_objc_unsupported
+#define defer_cancel(name) defer_objc_unsupported
 #else
-#define defer(...) _Static_assert(0, "defer() requires the source transformation")
-#define defer_named(name, ...) _Static_assert(0, "defer_named() requires the source transformation")
-#define defer_cancel(name) _Static_assert(0, "defer_cancel() requires the source transformation")
+#define defer(...) do { } while (0)
+#define defer_named(name, ...) do { } while (0)
+#define defer_cancel(name) do { } while (0)
 #endif

@@ -167,13 +167,25 @@ std::string replace_captures(std::string_view body, const std::map<std::string, 
 std::string transform_closures(const std::string &source) {
   std::vector<Closure> closures;
   for (std::size_t cursor = 0;;) {
-    const auto marker = source.find("recast_closure", cursor);
+    const auto marker = source.find("closure", cursor);
     if (marker == std::string::npos) break;
-    auto open = source.find('(', marker + 14);
-    if (open == std::string::npos) throw std::runtime_error("malformed recast_closure invocation");
+    auto invocation = marker + 7;
+    while (invocation < source.size() && std::isspace(static_cast<unsigned char>(source[invocation]))) ++invocation;
+    if (invocation >= source.size() || source[invocation] != '(') {
+      cursor = marker + 7;
+      continue;
+    }
+    const auto line_start = source.rfind('\n', marker);
+    if (source.substr(line_start == std::string::npos ? 0 : line_start + 1,
+                      marker - (line_start == std::string::npos ? 0 : line_start + 1)).find("#define") != std::string::npos) {
+      cursor = marker + 7;
+      continue;
+    }
+    auto open = invocation;
+    if (open == std::string::npos) throw std::runtime_error("malformed closure invocation");
     const auto close = matching(source, open, '(', ')');
     const auto args = comma_parts(std::string_view(source).substr(open + 1, close - open - 1));
-    if (args.size() != 5) throw std::runtime_error("recast_closure requires five arguments");
+    if (args.size() != 5) throw std::runtime_error("closure requires five arguments");
     const auto params_open = args[2].find('('), params_close = args[2].rfind(')');
     const auto captures_open = args[3].find('('), captures_close = args[3].rfind(')');
     const auto body_open = args[4].find('{');

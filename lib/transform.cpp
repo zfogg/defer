@@ -79,8 +79,7 @@ public:
       if (kind == CXCursor_MacroDefinition)
         macro_definitions_[spelling(cursor)].push_back(cursor);
       if (kind == CXCursor_MacroExpansion &&
-          (spelling(cursor) == "DEFER" || spelling(cursor) == "DEFER_NAMED" || spelling(cursor) == "DEFER_CANCEL" ||
-           spelling(cursor) == "defer" || spelling(cursor) == "defer_named" || spelling(cursor) == "defer_cancel")) {
+          (spelling(cursor) == "defer" || spelling(cursor) == "defer_named" || spelling(cursor) == "defer_cancel")) {
         if (!in_file(cursor)) {
           if (allow_other_files_)
             continue;
@@ -176,8 +175,7 @@ std::set<std::string> Transformer::expanded_identifiers(const std::vector<Token>
     if (token.kind == CXToken_Identifier && found.insert(token.text).second)
       pending.push_back(token.text);
   const std::set<std::string> forbidden = {"return", "goto",        "break",          "continue",
-                                           "DEFER",  "DEFER_NAMED", "DEFER_CANCEL",
-                                           "defer", "defer_named", "defer_cancel"};
+                                           "defer",  "defer_named", "defer_cancel"};
   while (!pending.empty()) {
     auto name = pending.back();
     pending.pop_back();
@@ -329,7 +327,7 @@ void Transformer::visit_defer(CXCursor cursor, CXCursorKind parent) {
   }
   if (macro == macros_.end()) return;
   const auto name = spelling(macro->second);
-  if (name != "DEFER_CANCEL" && name != "defer_cancel" && parent != CXCursor_CompoundStmt)
+  if (name != "defer_cancel" && parent != CXCursor_CompoundStmt)
     fail_at(start, "defer must be a direct statement in a block; add braces around the statement");
   const auto macro_end = end(macro->second);
   auto parts = tokens(unit_, clang_getCursorExtent(macro->second));
@@ -341,13 +339,13 @@ void Transformer::visit_defer(CXCursor cursor, CXCursorKind parent) {
   const auto argument = static_cast<std::size_t>(opening - parts.begin()) + 1;
   std::string handle;
   unsigned action_begin = opening->start + 1;
-  if (name != "DEFER" && name != "defer") {
+  if (name != "defer" && name != "defer") {
     if (argument + 1 >= parts.size() || parts[argument].kind != CXToken_Identifier ||
-        parts[argument + 1].text != ((name == "DEFER_NAMED" || name == "defer_named") ? "," : ")") ||
-        ((name == "DEFER_CANCEL" || name == "defer_cancel") && argument + 2 != parts.size()))
+        parts[argument + 1].text != (name == "defer_named" ? "," : ")") ||
+        (name == "defer_cancel" && argument + 2 != parts.size()))
       fail_at(start, name + " requires a single identifier handle");
     handle = parts[argument].text;
-    if (name == "DEFER_CANCEL" || name == "defer_cancel") {
+    if (name == "defer_cancel") {
       for (auto scope = scopes_.rbegin(); scope != scopes_.rend(); ++scope)
         for (auto action = scope->actions.rbegin(); action != scope->actions.rend(); ++action)
           if (action->handle == handle) {
@@ -370,13 +368,12 @@ void Transformer::visit_defer(CXCursor cursor, CXCursorKind parent) {
     fail("empty defer at byte " + std::to_string(start));
   const auto action_start = action_begin + static_cast<unsigned>(raw_action.find_first_not_of(" \t\r\n\f\v"));
   const std::set<std::string> forbidden = {"return", "goto",        "break",       "continue",
-                                           "DEFER",  "DEFER_NAMED", "DEFER_CANCEL",
-                                           "defer", "defer_named", "defer_cancel"};
-  for (std::size_t i = (name == "DEFER" || name == "defer") ? 1 : argument + 2; i < parts.size(); ++i)
+                                           "defer",  "defer_named", "defer_cancel"};
+  for (std::size_t i = (name == "defer" || name == "defer") ? 1 : argument + 2; i < parts.size(); ++i)
     if (forbidden.count(parts[i].text))
       fail_at(start, "control transfer or nested defer inside cleanup is unsupported");
   std::vector<Token> action_tokens(
-      parts.begin() + std::min((name == "DEFER" || name == "defer") ? std::size_t(1) : argument + 2, parts.size()), parts.end());
+      parts.begin() + std::min((name == "defer" || name == "defer") ? std::size_t(1) : argument + 2, parts.size()), parts.end());
   auto flag = "__defer_active_" + std::to_string(start);
   scopes_.back().actions.push_back({start, action_start, flag, action, expanded_identifiers(action_tokens), handle});
   edits_.push_back(

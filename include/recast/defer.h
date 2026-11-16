@@ -24,18 +24,18 @@ private:
 template <typename F> guard<F> make_guard(F action) { return guard<F>(static_cast<F &&>(action)); }
 } // namespace recast_detail
 } // extern "C++"
-#define RECAST_JOIN_IMPL(a, b) a##b
-#define RECAST_JOIN(a, b) RECAST_JOIN_IMPL(a, b)
-#define DEFER(...) auto RECAST_JOIN(__defer_guard_, __COUNTER__) = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
-#define DEFER_NAMED(name, ...) auto name = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
-#define DEFER_CANCEL(name) (name).cancel()
+#define recast_defer_join_impl(a, b) a##b
+#define recast_defer_join(a, b) recast_defer_join_impl(a, b)
+#define defer(...) auto recast_defer_join(__defer_guard_, __COUNTER__) = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
+#define defer_named(name, ...) auto name = ::recast_detail::make_guard([&]() { __VA_ARGS__; })
+#define defer_cancel(name) (name).cancel()
 #elif defined(RECAST_DEFER_PARSING)
 void __recast_defer_marker(void);
-#define DEFER(...) do { __recast_defer_marker(); } while (0)
-#define DEFER_NAMED(name, ...) do { __recast_defer_marker(); } while (0)
-#define DEFER_CANCEL(name) do { __recast_defer_marker(); } while (0)
+#define defer(...) do { __recast_defer_marker(); } while (0)
+#define defer_named(name, ...) do { __recast_defer_marker(); } while (0)
+#define defer_cancel(name) do { __recast_defer_marker(); } while (0)
 #else
-#define DEFER(...) do { } while (0)
-#define DEFER_NAMED(name, ...) do { } while (0)
-#define DEFER_CANCEL(name) do { } while (0)
+#define defer(...) do { } while (0)
+#define defer_named(name, ...) do { } while (0)
+#define defer_cancel(name) do { } while (0)
 #endif
