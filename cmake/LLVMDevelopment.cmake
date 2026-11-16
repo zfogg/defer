@@ -1,5 +1,7 @@
 include_guard(GLOBAL)
 
+option(RECAST_AUTO_DOWNLOAD_LLVM_DEV "Download the Windows LLVM development archive when it is unavailable" ON)
+
 # Locate the host libraries used by the native defer tool. The Windows archive
 # contains only the headers and libraries needed for this tool; it does not
 # provide a complete LLVM CMake package.
@@ -57,6 +59,36 @@ function(recast_find_llvm_development)
                 set(_root "${CMAKE_SOURCE_DIR}/.deps-cache/llvm-dev-23.1.3${_suffix}")
             else()
                 set(_root "${_repo_root}/.deps-cache/llvm-dev-23.1.3${_suffix}")
+            endif()
+            if(RECAST_AUTO_DOWNLOAD_LLVM_DEV AND NOT EXISTS "${_root}/include/llvm/Support/CommandLine.h")
+                if(_suffix STREQUAL "-aarch64")
+                    set(_llvm_archive_arch "aarch64")
+                else()
+                    set(_llvm_archive_arch "x86_64")
+                endif()
+                set(_llvm_version "23.1.5")
+                set(_llvm_archive_name "clang+llvm-${_llvm_version}-${_llvm_archive_arch}-pc-windows-msvc.tar.xz")
+                set(_llvm_archive "${CMAKE_BINARY_DIR}/_deps/${_llvm_archive_name}")
+                set(_llvm_download_root "${CMAKE_BINARY_DIR}/_deps/llvm-dev-${_llvm_version}${_suffix}")
+                message(STATUS "Recast LLVM development archive not found; downloading ${_llvm_archive_name}")
+                file(DOWNLOAD
+                    "https://github.com/llvm/llvm-project/releases/download/llvmorg-${_llvm_version}/${_llvm_archive_name}"
+                    "${_llvm_archive}"
+                    SHOW_PROGRESS)
+                file(MAKE_DIRECTORY "${_llvm_download_root}")
+                execute_process(
+                    COMMAND "${CMAKE_COMMAND}" -E tar xf "${_llvm_archive}"
+                    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/_deps"
+                    RESULT_VARIABLE _llvm_extract_result)
+                if(NOT _llvm_extract_result EQUAL 0)
+                    message(FATAL_ERROR "Could not extract the Recast LLVM development archive")
+                endif()
+                file(GLOB _llvm_extracted_root LIST_DIRECTORIES true "${CMAKE_BINARY_DIR}/_deps/clang+llvm-*")
+                list(LENGTH _llvm_extracted_root _llvm_extracted_count)
+                if(NOT _llvm_extracted_count EQUAL 1)
+                    message(FATAL_ERROR "Could not locate the extracted Recast LLVM development archive")
+                endif()
+                file(RENAME "${_llvm_extracted_root}" "${_root}")
             endif()
         endif()
         foreach(_key _llvm_include _clang_include _llvm_support _llvm_demangle _clang_library _clang_runtime)
