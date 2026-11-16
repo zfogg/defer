@@ -286,8 +286,8 @@ void Transformer::visit_function(CXCursor cursor) {
   return_type_.clear();
   if (!function_void_ && !objc_) {
     const auto function_type = "__defer_function_" + std::to_string(start);
-    function_prelude_ = "typedef __typeof__(&" + spelling(cursor) + ") " + function_type + ";";
-    std::string args;
+    const auto result_type = consume_string(clang_getTypeSpelling(clang_getCursorResultType(cursor)));
+    function_prelude_ = "typedef " + result_type + " (*" + function_type + ")(";
     const int count = clang_Cursor_getNumArguments(cursor);
     for (int i = 0; i < count; ++i) {
       auto parameter = clang_Cursor_getArgument(cursor, static_cast<unsigned>(i));
@@ -307,22 +307,21 @@ void Transformer::visit_function(CXCursor cursor) {
              parameter_type.kind != CXType_Pointer) ||
             type_name.find("unnamed") != std::string::npos || type_name.find("anonymous") != std::string::npos)
           fail_at(start, "unnamed parameter type cannot be captured safely; give it a name");
-        function_prelude_ += " typedef __typeof__((" + type_name + "){0}) " + alias + ";";
+        function_prelude_ += " ";
       } else {
-        function_prelude_ += " typedef __typeof__(" + name + ") " + alias + ";";
+        function_prelude_ += " ";
       }
-      if (i)
-        args += ", ";
-      args += "(" + alias + "){0}";
+      const auto type_name = consume_string(clang_getTypeSpelling(parameter_type));
+      function_prelude_ += (i ? ", " : "") + type_name + " " + alias;
     }
-    return_type_ = "__typeof__(((" + function_type + ")0)(" + args + "))";
+    function_prelude_ += ");";
+    return_type_ = result_type;
     for (int i = 0; i < count; ++i) {
       if (spelling(clang_Cursor_getArgument(cursor, static_cast<unsigned>(i))) == spelling(cursor)) {
-        const auto result = consume_string(clang_getTypeSpelling(clang_getCursorResultType(cursor)));
-        if (result.find("unnamed") != std::string::npos || result.find("anonymous") != std::string::npos)
+        if (result_type.find("unnamed") != std::string::npos || result_type.find("anonymous") != std::string::npos)
           fail("cannot name return type when parameter shadows function");
         function_prelude_.clear();
-        return_type_ = "__typeof__((" + result + "){0})";
+        return_type_ = result_type;
         break;
       }
     }
