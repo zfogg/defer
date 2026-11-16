@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import functools
 import hashlib
 import importlib.metadata
@@ -164,6 +165,7 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
     os.chdir(command.directory)
     result = ["-iquote", str(source.resolve().parent)]
     emscripten = "emcc" in compiler or "em++" in compiler
+    msvc_compiler = Path(compiler).name.lower() in ("cl.exe", "cl")
     if emscripten:
         result.extend(emscripten_driver_defaults(compiler))
     index = 0
@@ -176,10 +178,10 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
         ):
             index += 4
             continue
-        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd"):
+        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd", "/Yu", "/Fp"):
             index += 2
             continue
-        if value.startswith(("/Fo", "/Fd")):
+        if value.startswith(("/Fo", "/Fd", "/Yu", "/Fp")):
             index += 1
             continue
         if (value == "-ivfsoverlay" and index + 1 < len(arguments)
@@ -212,7 +214,37 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             continue
         result.append(value)
         index += 1
-    if not any(value.startswith("-resource-dir") for value in result):
+    if msvc_compiler:
+        normalized: list[str] = []
+        index = 0
+        while index < len(result):
+            value = result[index]
+            if value == "--driver-mode=cl":
+                index += 1
+                continue
+            if value in ("-clang:-I", "-clang:-iquote", "-clang:-isystem") and index + 1 < len(result):
+                normalized.extend((value[7:], result[index + 1].removeprefix("-clang:")))
+                index += 2
+                continue
+            if value.startswith("/I") and len(value) > 2:
+                normalized.extend(("-I", value[2:]))
+            elif value.startswith("/D") and len(value) > 2:
+                normalized.append("-D" + value[2:])
+            elif value.startswith("/FI") and len(value) > 3:
+                normalized.extend(("-include", value[3:]))
+            elif value.startswith("/std:"):
+                normalized.append("-std=" + ("c2x" if value[5:].lower() == "clatest" else value[5:]))
+            elif value.startswith("-clang:"):
+                normalized.append(value[7:])
+            elif value.lower() in ("/experimental:c11atomics", "/permissive-", "/fs", "/od", "/zi", "/w4", "/mdd", "/md", "/rtc1", "/ehsc", "/ob0"):
+                pass
+            elif value.lower().startswith(("/external:i", "-external:i")):
+                normalized.extend(("-I", value[value.lower().index(":i") + 2:]))
+            elif not value.lower().startswith(("/external:", "-external:")):
+                normalized.append(value)
+            index += 1
+        result = normalized
+    if not msvc_compiler and not any(value.startswith("-resource-dir") for value in result):
         process = subprocess.run(
             [compiler, "-print-resource-dir"],
             capture_output=True,
@@ -220,9 +252,12 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             check=False,
         )
         if process.returncode:
-            raise TransformError(
-                f"cannot determine resource directory for {compiler}: {process.stderr}"
-            )
+            clang = shutil.which("clang")
+            if not clang:
+                raise TransformError(f"cannot determine resource directory for {compiler}: {process.stderr}")
+            process = subprocess.run([clang, "-print-resource-dir"], capture_output=True, text=True, check=False)
+            if process.returncode:
+                raise TransformError(f"cannot determine resource directory for {compiler} or {clang}: {process.stderr}")
         result.extend(["-resource-dir", process.stdout.strip()])
     return result
 
