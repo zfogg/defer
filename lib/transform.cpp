@@ -291,7 +291,6 @@ void Transformer::visit_function(CXCursor cursor) {
     const int count = clang_Cursor_getNumArguments(cursor);
     for (int i = 0; i < count; ++i) {
       auto parameter = clang_Cursor_getArgument(cursor, static_cast<unsigned>(i));
-      const auto name = spelling(parameter);
       auto type = clang_getCanonicalType(clang_getCursorType(parameter));
       const auto parameter_type = type;
       while (type.kind == CXType_Pointer || type.kind == CXType_ConstantArray || type.kind == CXType_IncompleteArray) {
@@ -300,19 +299,8 @@ void Transformer::visit_function(CXCursor cursor) {
       }
       if (type.kind == CXType_VariableArray || type.kind == CXType_DependentSizedArray)
         fail("variably modified parameter in defer function at byte " + std::to_string(start));
-      auto alias = "__defer_argument_" + std::to_string(start) + "_" + std::to_string(i);
-      if (name.empty()) {
-        const auto type_name = consume_string(clang_getTypeSpelling(parameter_type));
-        if (((parameter_type.kind < CXType_FirstBuiltin || parameter_type.kind > CXType_LastBuiltin) &&
-             parameter_type.kind != CXType_Pointer) ||
-            type_name.find("unnamed") != std::string::npos || type_name.find("anonymous") != std::string::npos)
-          fail_at(start, "unnamed parameter type cannot be captured safely; give it a name");
-        function_prelude_ += " ";
-      } else {
-        function_prelude_ += " ";
-      }
       const auto type_name = consume_string(clang_getTypeSpelling(parameter_type));
-      function_prelude_ += (i ? ", " : "") + type_name + " " + alias;
+      function_prelude_ += (i ? ", " : "") + type_name;
     }
     function_prelude_ += ");";
     return_type_ = result_type;
