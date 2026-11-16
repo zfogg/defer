@@ -1,4 +1,5 @@
 #include "driver.h"
+#include "closure_transform.h"
 #include "text.h"
 #include "transform.h"
 
@@ -423,7 +424,7 @@ std::string read_file(const fs::path &path) {
 }
 
 fs::path loaded_libclang_path() {
-#ifdef DEFER_STATIC_LIBCLANG
+#ifdef RECAST_STATIC_LIBCLANG
   // Static libclang has no shared-library pathname. The executable contains
   // its implementation and is a suitable identity for incremental caches.
   auto executable = llvm::sys::fs::getMainExecutable(nullptr, reinterpret_cast<void *>(&loaded_libclang_path));
@@ -454,7 +455,7 @@ fs::path loaded_libclang_path() {
 }
 
 void verify_libclang(const fs::path &requested) {
-#ifdef DEFER_STATIC_LIBCLANG
+#ifdef RECAST_STATIC_LIBCLANG
   (void)requested;
   throw std::runtime_error("--libclang cannot select a shared library in a statically linked executable");
 #else
@@ -766,7 +767,10 @@ TransformResult transform_content(ClangIndex &index, const fs::path &source_path
   const bool objc = is_objc_source(source, arguments);
   if (objc)
     require_objc_exceptions(arguments);
-  arguments.push_back("-DDEFER_PARSING=1");
+  if (options.enable_closures)
+    content = transform_closures(content);
+  arguments.push_back("-DRECAST_DEFER_PARSING=1");
+  arguments.push_back("-DRECAST_CLOSURE_PARSING=1");
   std::vector<const char *> raw;
   for (const auto &arg : arguments)
     raw.push_back(arg.c_str());
@@ -802,7 +806,7 @@ TransformResult transform_content(ClangIndex &index, const fs::path &source_path
     return {std::move(dependencies), std::move(content)};
   }
   auto unit = parse_wrapped(index.get(), source_name, raw, content, options.preamble);
-  auto transformed = transform(unit->get(), source.u8string(), content, objc);
+  auto transformed = options.enable_defer ? transform(unit->get(), source.u8string(), content, objc) : content;
   FileDependencies dependencies{output, {source.u8string()}};
   clang_getInclusions(
       unit->get(),
@@ -842,7 +846,8 @@ FileDependencies transform_file(ClangIndex &index, const fs::path &source_path, 
       require_objc_exceptions(arguments);
     if (is_cpp_source(source, arguments))
       throw std::runtime_error("C++ uses native scope guards and does not require a header overlay");
-    arguments.push_back("-DDEFER_PARSING=1");
+    arguments.push_back("-DRECAST_DEFER_PARSING=1");
+    arguments.push_back("-DRECAST_CLOSURE_PARSING=1");
     std::vector<const char *> raw;
     for (const auto &arg : arguments)
       raw.push_back(arg.c_str());
@@ -866,7 +871,8 @@ std::string inspect_file(ClangIndex &index, const fs::path &source_path, unsigne
     require_objc_exceptions(arguments);
   if (is_cpp_source(source, arguments))
     throw std::runtime_error("C++ defer inspection is not supported; C++ uses native scope guards");
-  arguments.push_back("-DDEFER_PARSING=1");
+  arguments.push_back("-DRECAST_DEFER_PARSING=1");
+  arguments.push_back("-DRECAST_CLOSURE_PARSING=1");
   std::vector<const char *> raw;
   for (const auto &arg : arguments)
     raw.push_back(arg.c_str());

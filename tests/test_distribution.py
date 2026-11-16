@@ -25,10 +25,10 @@ def command(request: pytest.FixtureRequest) -> list[str]:
 
 
 def test_cmake_config_stdout_and_write_file(command: list[str], tmp_path: Path) -> None:
-    expected = (ROOT / "Defer.cmake").read_bytes().replace(b"\r\n", b"\n")
+    expected = (ROOT / "Recast.cmake").read_bytes().replace(b"\r\n", b"\n")
     result = subprocess.run([*command, "cmake-config"], capture_output=True, check=True)
     assert result.stdout.replace(b"\r\n", b"\n") == expected
-    destination = tmp_path / "Defer.cmake"
+    destination = tmp_path / "Recast.cmake"
     result = subprocess.run([*command, "cmake-config", "--write-file", str(destination)], capture_output=True, check=True)
     assert result.stdout == b""
     assert destination.read_bytes().replace(b"\r\n", b"\n") == expected
@@ -47,7 +47,7 @@ def test_direct_transform_finds_builtin_headers(command: list[str], tmp_path: Pa
     source = tmp_path / "source.c"
     output = tmp_path / "output.c"
     source.write_text('#include <stdio.h>\n#include "defer.h"\nint main(void) { defer(puts("done")); return 0; }\n', encoding="utf-8")
-    include = f"-I{ROOT / 'cpp' / 'include'}"
+    include = f"-I{ROOT / 'include'}"
     result = subprocess.run([*command, str(source), str(output), "--", "-std=c17", include],
                             cwd=tmp_path, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
@@ -59,7 +59,7 @@ def test_direct_transform_finds_builtin_headers(command: list[str], tmp_path: Pa
 def test_module_and_executable_transform_standard_input(command: list[str], tmp_path: Path) -> None:
     source = b'#include "defer.h"\nvoid f(void) { defer((void)0); }\n'
     result = subprocess.run(
-        [*command, "--filename", str(tmp_path / "virtual.c"), "--", "-I", str(ROOT / "cpp" / "include")],
+        [*command, "--filename", str(tmp_path / "virtual.c"), "--", "-I", str(ROOT / "include")],
         cwd=tmp_path,
         input=source,
         capture_output=True,

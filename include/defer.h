@@ -42,7 +42,7 @@ template <typename F> guard<F> make_guard(F action) { return guard<F>(static_cas
 #define defer(...) auto DEFER_JOIN(__defer_guard_, __COUNTER__) = ::defer_detail::make_guard([&]() { __VA_ARGS__; })
 #define defer_named(name, ...) auto name = ::defer_detail::make_guard([&]() { __VA_ARGS__; })
 #define defer_cancel(name) (name).cancel()
-#elif defined(DEFER_PARSING) && !defined(__cplusplus)
+#elif defined(RECAST_DEFER_PARSING) && !defined(__cplusplus)
 void __defer_marker(void);
 #define defer(...)                                                                                                     \
   do {                                                                                                                 \

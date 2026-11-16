@@ -365,6 +365,12 @@ def check_libclang_version() -> None:
         raise TransformError(f"LLVM 19 or newer libclang required, found {version}")
 
 
+def validate_transforms(value: str) -> None:
+    transforms = value.replace(" ", "").split(",")
+    if transforms != ["all"] and any(transform not in {"defer"} for transform in transforms):
+        raise TransformError("the Python backend supports only the defer transformation")
+
+
 def batch_main() -> int:
     """Transform a CMake batch in one interpreter and emit one combined depfile."""
     parser = argparse.ArgumentParser(
@@ -376,8 +382,14 @@ def batch_main() -> int:
     parser.add_argument("--compilation-database", type=Path, help="database directory or compile_commands.json")
     parser.add_argument("--depfile", type=Path)
     parser.add_argument("--dependency-stamps", action="store_true")
-    parser.add_argument("--header-overlays", action="store_true")
+    parser.add_argument("--transforms", default=os.environ.get("RECAST_TRANSFORMS", "all"))
+    parser.add_argument(
+        "--header-overlays",
+        action="store_true",
+        default=os.environ.get("RECAST_HEADER_OVERLAYS", "OFF").upper() in {"1", "ON", "TRUE"},
+    )
     args = parser.parse_args()
+    validate_transforms(args.transforms)
     if args.libclang:
         cindex.Config.set_library_file(str(args.libclang.resolve()))
     manifest = args.batch.resolve()
@@ -446,17 +458,17 @@ def batch_main() -> int:
 
 def main(protected_paths: list[Path] | None = None) -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "cmake-config":
-        config = Path(__file__).resolve().parent.parent / "Defer.cmake"
+        config = Path(__file__).resolve().parent.parent / "Recast.cmake"
         if not config.is_file():
             try:
                 package = importlib.metadata.distribution("defer-tool")
                 entry = next(
                     item for item in package.files or ()
-                    if item.as_posix().endswith("share/defer/Defer.cmake")
+                    if item.as_posix().endswith("share/recast/Recast.cmake")
                 )
                 config = Path(str(package.locate_file(entry)))
             except (importlib.metadata.PackageNotFoundError, StopIteration):
-                config = Path(sys.prefix) / "share" / "defer" / "Defer.cmake"
+                config = Path(sys.prefix) / "share" / "recast" / "Recast.cmake"
         parser = argparse.ArgumentParser(prog="defer-tool cmake-config")
         parser.add_argument("--write-file", type=Path)
         options = parser.parse_args(sys.argv[2:])
@@ -479,6 +491,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
     parser.add_argument("--compilation-database", type=Path)
     parser.add_argument("--depfile", type=Path)
     parser.add_argument("--dependency-stamp", type=Path)
+    parser.add_argument("--transforms", default=os.environ.get("RECAST_TRANSFORMS", "all"))
     parser.add_argument("--header-overlay", type=Path)
     parser.add_argument("--filename", help="required virtual input path for stdin")
     parser.add_argument("source", type=Path, nargs="?")
@@ -496,6 +509,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
         trailing_args = argv[separator + 1 :]
         argv = argv[:separator]
     args = parser.parse_args(argv)
+    validate_transforms(args.transforms)
     if args.libclang:
         cindex.Config.set_library_file(str(args.libclang.resolve()))
     clang_args = [*args.clang_args, *trailing_args]
@@ -528,7 +542,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
             check_libclang_version()
             source = sys.stdin.buffer.read()
             _, output = transform_input(cindex.Index.create(), path, source,
-                                        [*clang_args, "-DDEFER_PARSING=1"], objc)
+                                        [*clang_args, "-DRECAST_DEFER_PARSING=1"], objc)
             sys.stdout.buffer.write(output)
             sys.stdout.buffer.flush()
             return 0
@@ -548,7 +562,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
             if is_cpp_source(source_path, clang_args):
                 raise TransformError("C++ defer inspection is not supported; C++ uses native scope guards")
             source = source_path.read_bytes()
-            clang_args.append("-DDEFER_PARSING=1")
+            clang_args.append("-DRECAST_DEFER_PARSING=1")
             index = cindex.Index.create()
             tu, source = parse_wrapped(index, source_path, clang_args, source)
             transformer = Transformer(source_path, source, tu, objc=objc)
@@ -597,7 +611,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
         if objc:
             require_objc_exceptions(clang_args)
         source = args.source.read_bytes()
-        clang_args.append("-DDEFER_PARSING=1")
+        clang_args.append("-DRECAST_DEFER_PARSING=1")
         check_libclang_version()
         index = cindex.Index.create()
         if args.header_overlay:

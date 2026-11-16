@@ -55,4 +55,4 @@ output paths, optionally followed by a JSON array of per-file Clang arguments;
 alternatively supply `--compilation-database` for all rows. Use `--explain
 source.c:line` to inspect cleanup decisions and `--show-transformed
 source.c:line` to inspect generated code. `--jobs` controls batch concurrency.
-Run `defer-tool --help` for the complete interface.
+Run `recast --help` for the complete interface.

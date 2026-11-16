@@ -1,8 +1,8 @@
-# defer
+# Recast
 
-[GitHub](https://github.com/zfogg/defer) · [Documentation](https://zfogg.github.io/defer/) · [C++ and C API](https://zfogg.github.io/defer/cpp/) · [Python API](https://zfogg.github.io/defer/python/)
+[GitHub](https://github.com/zfogg/recast) · [Documentation](https://zfogg.github.io/recast/) · [C++ and C API](https://zfogg.github.io/recast/cpp/) · [Python API](https://zfogg.github.io/recast/python/)
 
-`defer` provides block-scoped cleanup for C and Objective-C, and a native C++ scope guard. The `defer-tool` source transformer uses LLVM 19 or newer and libclang. Cleanup is registered when execution reaches `defer(...)` and runs in reverse order on supported block exits. It does not run on `longjmp` or process termination. Unsupported cases produce an error.
+`Recast` is a source-transformation pipeline. Its defer pass provides block-scoped cleanup for C and Objective-C, and a native C++ scope guard; the closure pass is being introduced by the Recast migration. The `recast` source transformer uses LLVM 19 or newer and libclang. Existing defer spellings remain unchanged. Unsupported cases produce an error.
 
 ## Build and install
 
@@ -15,15 +15,15 @@ ctest --test-dir build --output-on-failure
 cmake --install build --prefix /your/install/prefix
 ```
 
-On Windows, install the Visual Studio C++ build tools and a compatible Clang toolchain, CMake, and Ninja. Use a developer PowerShell for your target architecture so the Windows SDK and linker are available. Download a `clang+llvm-*-x86_64-pc-windows-msvc.tar.xz` or `clang+llvm-*-aarch64-pc-windows-msvc.tar.xz` development archive from [LLVM releases](https://github.com/llvm/llvm-project/releases), as appropriate for your machine. Extract it and point `DEFER_LLVM_DEV_ROOT` at the extracted directory containing `include/`, `lib/`, and `bin/libclang.dll`:
+On Windows, install the Visual Studio C++ build tools and a compatible Clang toolchain, CMake, and Ninja. Use a developer PowerShell for your target architecture so the Windows SDK and linker are available. Download a `clang+llvm-*-x86_64-pc-windows-msvc.tar.xz` or `clang+llvm-*-aarch64-pc-windows-msvc.tar.xz` development archive from [LLVM releases](https://github.com/llvm/llvm-project/releases), as appropriate for your machine. Extract it and point `RECAST_LLVM_DEV_ROOT` at the extracted directory containing `include/`, `lib/`, and `bin/libclang.dll`:
 
 ```powershell
 scoop install llvm cmake ninja
 cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++ `
-  -DDEFER_LLVM_DEV_ROOT="C:/path/to/llvm-dev"
+  -DRECAST_LLVM_DEV_ROOT="C:/path/to/llvm-dev"
 cmake --build build
 ctest --test-dir build --output-on-failure
-cmake --install build --prefix "C:/path/to/defer-install"
+cmake --install build --prefix "C:/path/to/recast-install"
 ```
 
 The Scoop LLVM package provides the compiler; use the separate LLVM development archive for the headers and libraries required by this build. Match their LLVM versions and target architecture.
@@ -34,10 +34,10 @@ Build configuration options can be passed to CMake as `-DNAME=VALUE`:
 
 | Option | Purpose |
 | --- | --- |
-| `DEFER_LLVM_DEV_ROOT` | LLVM development directory; required on Windows and for static LLVM builds. |
-| `DEFER_HOST_CXX` | Host compiler used to locate `llvm-config` for a shared-library build on Unix. |
-| `DEFER_STATIC_LIBCLANG` | Link LLVM and libclang statically; default `OFF`. |
-| `DEFER_FULLY_STATIC_EXECUTABLE` | Link the CLI fully statically, for a musl build; default `OFF`. |
+| `RECAST_LLVM_DEV_ROOT` | LLVM development directory; required on Windows and for static LLVM builds. |
+| `RECAST_HOST_CXX` | Host compiler used to locate `llvm-config` for a shared-library build on Unix. |
+| `RECAST_STATIC_LIBCLANG` | Link LLVM and libclang statically; default `OFF`. |
+| `RECAST_FULLY_STATIC_EXECUTABLE` | Link the CLI fully statically, for a musl build; default `OFF`. |
 | `BUILD_TESTING` | Build the native tests; default `ON`. |
 | `CMAKE_BUILD_TYPE` | Select the configuration, such as `Debug` or `Release`, with Ninja. |
 | `CMAKE_CXX_COMPILER` | Select the C++ compiler. |
@@ -48,18 +48,18 @@ Build configuration options can be passed to CMake as `-DNAME=VALUE`:
 Build and install the tool as described above, add the installation's `bin` directory to your `PATH`, then transform and compile a source file:
 
 ```sh
-defer-tool examples/hello_world/main.c build/hello.c -- -Icpp/include
-clang build/hello.c -Icpp/include -o build/hello
+recast examples/hello_world/main.c build/hello.c -- -Iinclude
+clang build/hello.c -Iinclude -o build/hello
 ./build/hello
 ```
 
 Or transform a stream (the filename determines language and relative include resolution):
 
 ```sh
-defer-tool --filename input.c -- -std=c17 -Icpp/include < input.c > output.c
+recast --filename input.c -- -std=c17 -Iinclude < input.c > output.c
 ```
 
-Use `defer-tool --help` for batch manifests, compilation databases, diagnostics, and other options. The Python implementation can be invoked as `uv run --frozen python -m defer` and requires an LLVM libclang shared library.
+Use `recast --help` for batch manifests, compilation databases, diagnostics, and other options. The Python implementation can be invoked as `uv run --frozen python -m defer` and requires an LLVM libclang shared library.
 
 ### Command-line flags
 
@@ -94,21 +94,21 @@ The native executable also exposes LLVM's general command-line options in `--hel
 
 ## Use with CMake
 
-Obtain `Defer.cmake` from the release binary, including when shell redirection is unavailable:
+Obtain `Recast.cmake` from the release binary, including when shell redirection is unavailable:
 
 ```sh
-defer-tool cmake-config --write-file Defer.cmake
+recast cmake-config --write-file Recast.cmake
 ```
 
-Set `CMAKE_EXPORT_COMPILE_COMMANDS` to `ON`, point `DEFER_NATIVE_BINARY` at the host tool, include the generated module, and call `defer_targets` after creating the targets:
+Set `CMAKE_EXPORT_COMPILE_COMMANDS` to `ON`, point `RECAST_NATIVE_BINARY` at the host tool, include the generated module, and call `recast_targets` after creating the targets:
 
 ```cmake
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(DEFER_NATIVE_BINARY "/path/to/defer-tool")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Defer.cmake")
+set(RECAST_NATIVE_BINARY "/path/to/recast")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Recast.cmake")
 add_executable(app main.c)
 target_include_directories(app PRIVATE "/path/to/defer/include")
-defer_targets(app)
+recast_targets(app)
 ```
 
 The module uses batch transformation and the compilation database, supports incremental rebuilds and header overlays, and requires single-config Ninja or Unix Makefiles. Include `defer.h` in source files. See `examples/hello_world_cmake` for an example.
@@ -119,17 +119,18 @@ The module also accepts these CMake variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `DEFER_SOURCE_ROOT` | Root of sources to transform; defaults to `CMAKE_SOURCE_DIR`. |
-| `DEFER_SOURCE_DIRS` | Semicolon-separated directories relative to the source root; defaults to `.`. |
-| `DEFER_BACKEND` | `NATIVE` (default) or `PYTHON`. |
-| `DEFER_NATIVE_BINARY` | Path to the host executable; otherwise it is found on `PATH`. |
-| `DEFER_HEADER_OVERLAYS` | `AUTO` (default), `ON`, or `OFF`. |
-| `DEFER_SHARED_CACHE` | Directory for the native shared transformation cache. |
-| `DEFER_WRAPPER_HEADER_DIRS` | Additional directories containing defer wrapper macros. |
-| `DEFER_SOURCE_HOOK` | Optional CMake function that preprocesses eligible sources before defer. |
-| `DEFER_TOOL_ROOT` | Standalone source checkout used by the Python backend. |
-| `DEFER_PYTHON_COMMAND` | Python command used by the Python backend. |
-| `DEFER_LIBCLANG_PATH` | Shared libclang library used by the Python backend; defaults to `LIBCLANG_LIBRARY_FILE` if set. |
+| `RECAST_SOURCE_ROOT` | Root of sources to transform; defaults to `CMAKE_SOURCE_DIR`. |
+| `RECAST_SOURCE_DIRS` | Semicolon-separated directories relative to the source root; defaults to `.`. |
+| `RECAST_BACKEND` | `NATIVE` (default) or `PYTHON`. |
+| `RECAST_NATIVE_BINARY` | Path to the host executable; otherwise it is found on `PATH`. |
+| `RECAST_HEADER_OVERLAYS` | `AUTO` (default), `ON`, or `OFF`. |
+| `RECAST_SHARED_CACHE` | Directory for the native shared transformation cache. |
+| `RECAST_WRAPPER_HEADER_DIRS` | Additional directories containing defer wrapper macros. |
+| `RECAST_TRANSFORMS` | Comma-separated transforms used by the CMake integration; defaults to `all` (`defer`, `closures`, or both). |
+| `RECAST_SOURCE_HOOK` | Optional CMake function that preprocesses eligible sources before defer. |
+| `RECAST_TOOL_ROOT` | Standalone source checkout used by the Python backend. |
+| `RECAST_PYTHON_COMMAND` | Python command used by the Python backend. |
+| `RECAST_LIBCLANG_PATH` | Shared libclang library used by the Python backend; defaults to `LIBCLANG_LIBRARY_FILE` if set. |
 
 The optional source hook is called as `hook(output_variable target source relative_path compiled_path)`.
 Set the output variable in the parent scope to the original source or a generated source. The
@@ -137,37 +138,37 @@ generated source must have a build rule and preserve defer statements for the ne
 `compiled_path` identifies the defer output in the compilation database, or is empty when the
 source has no defer. The hook is responsible for tracking its generated file's dependencies.
 
-For a release archive, CMake can download the appropriate host archive and generate the module during configuration. Set `DEFER_ARCHIVE_URL` to a versioned release ZIP and `DEFER_ARCHIVE_SHA256` to its published checksum:
+For a release archive, CMake can download the appropriate host archive and generate the module during configuration. Set `RECAST_ARCHIVE_URL` to a versioned release ZIP and `RECAST_ARCHIVE_SHA256` to its published checksum:
 
 ```cmake
-set(_defer_dir "${CMAKE_BINARY_DIR}/defer-release/${DEFER_ARCHIVE_SHA256}")
-file(MAKE_DIRECTORY "${_defer_dir}")
-if(NOT EXISTS "${_defer_dir}/defer.zip")
-  file(DOWNLOAD "${DEFER_ARCHIVE_URL}" "${_defer_dir}/defer.zip"
-       EXPECTED_HASH "SHA256=${DEFER_ARCHIVE_SHA256}" TLS_VERIFY ON)
+set(_recast_dir "${CMAKE_BINARY_DIR}/recast-release/${RECAST_ARCHIVE_SHA256}")
+file(MAKE_DIRECTORY "${_recast_dir}")
+if(NOT EXISTS "${_recast_dir}/recast.zip")
+  file(DOWNLOAD "${RECAST_ARCHIVE_URL}" "${_recast_dir}/recast.zip"
+       EXPECTED_HASH "SHA256=${RECAST_ARCHIVE_SHA256}" TLS_VERIFY ON)
 else()
-  file(SHA256 "${_defer_dir}/defer.zip" _defer_archive_hash)
-  if(NOT _defer_archive_hash STREQUAL DEFER_ARCHIVE_SHA256)
-    message(FATAL_ERROR "Cached defer archive does not match DEFER_ARCHIVE_SHA256")
+  file(SHA256 "${_recast_dir}/recast.zip" _defer_archive_hash)
+  if(NOT _defer_archive_hash STREQUAL RECAST_ARCHIVE_SHA256)
+    message(FATAL_ERROR "Cached Recast archive does not match RECAST_ARCHIVE_SHA256")
   endif()
 endif()
 
-set(DEFER_NATIVE_BINARY "${_defer_dir}/bin/defer-tool${CMAKE_EXECUTABLE_SUFFIX}")
+set(RECAST_NATIVE_BINARY "${_recast_dir}/bin/recast${CMAKE_EXECUTABLE_SUFFIX}")
 
-if(NOT EXISTS "${DEFER_NATIVE_BINARY}")
-  file(ARCHIVE_EXTRACT INPUT "${_defer_dir}/defer.zip" DESTINATION "${_defer_dir}")
+if(NOT EXISTS "${RECAST_NATIVE_BINARY}")
+  file(ARCHIVE_EXTRACT INPUT "${_recast_dir}/recast.zip" DESTINATION "${_recast_dir}")
 endif()
-execute_process(COMMAND "${DEFER_NATIVE_BINARY}" cmake-config --write-file "${_defer_dir}/Defer.cmake"
+execute_process(COMMAND "${RECAST_NATIVE_BINARY}" cmake-config --write-file "${_recast_dir}/Recast.cmake"
                 COMMAND_ERROR_IS_FATAL ANY)
-include("${_defer_dir}/Defer.cmake")
+include("${_recast_dir}/Recast.cmake")
 # After add_executable(app ...):
-target_include_directories(app PRIVATE "${_defer_dir}/include")
-defer_targets(app)
+target_include_directories(app PRIVATE "${_recast_dir}/include")
+recast_targets(app)
 ```
 
-Choose the ZIP for the **build host**, including for cross compilation. Set `CMAKE_EXPORT_COMPILE_COMMANDS=ON` before configuring targets. The module's `DEFER_SOURCE_DIRS` and `DEFER_WRAPPER_HEADER_DIRS` options control which project and external headers it scans. The [documentation site](https://zfogg.github.io/defer/) describes scope, restrictions, and the SDK.
+Choose the ZIP for the **build host**, including for cross compilation. Set `CMAKE_EXPORT_COMPILE_COMMANDS=ON` before configuring targets. The module's `RECAST_SOURCE_DIRS` and `RECAST_WRAPPER_HEADER_DIRS` options control which project and external headers it scans. The [documentation site](https://zfogg.github.io/recast/) describes scope, restrictions, and the SDK.
 
-Header discovery skips nested virtual environments, `node_modules`, VCS metadata, and the current build directory. If a needed wrapper is inside one of those trees, list its directory explicitly in `DEFER_WRAPPER_HEADER_DIRS`.
+Header discovery skips nested virtual environments, `node_modules`, VCS metadata, and the current build directory. If a needed wrapper is inside one of those trees, list its directory explicitly in `RECAST_WRAPPER_HEADER_DIRS`.
 
 ## C++ SDK
 

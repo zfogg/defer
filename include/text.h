@@ -66,16 +66,16 @@ inline bool may_contain_defer(std::string_view source) {
   if (source.find("DEFER") != source.npos)
     return true;
   std::size_t search = 0;
-  while ((search = source.find("defer", search)) != source.npos) {
+  while ((search = source.find("DEFER", search)) != source.npos) {
     const auto start = search++;
     if (start && is_identifier_byte(static_cast<unsigned char>(source[start - 1])))
       continue;
     std::size_t pos;
-    if (is_keyword_at(source, start, "defer_named"))
+    if (is_keyword_at(source, start, "DEFER_NAMED"))
       pos = start + 11;
-    else if (is_keyword_at(source, start, "defer_cancel"))
+    else if (is_keyword_at(source, start, "DEFER_CANCEL"))
       pos = start + 12;
-    else if (is_keyword_at(source, start, "defer"))
+    else if (is_keyword_at(source, start, "DEFER"))
       pos = start + 5;
     else
       continue;
@@ -102,7 +102,57 @@ inline bool may_contain_defer(std::string_view source) {
     if (pos < source.size() && source[pos] == '(')
       return true;
   }
+  search = 0;
+  while ((search = source.find("defer", search)) != source.npos) {
+    const auto start = search++;
+    if (start && is_identifier_byte(static_cast<unsigned char>(source[start - 1])))
+      continue;
+    const auto keyword = is_keyword_at(source, start, "defer") ? "defer" :
+                        is_keyword_at(source, start, "defer_named") ? "defer_named" :
+                        is_keyword_at(source, start, "defer_cancel") ? "defer_cancel" : nullptr;
+    if (!keyword)
+      continue;
+    std::size_t pos = start + std::char_traits<char>::length(keyword);
+    while (pos < source.size() && (source[pos] == ' ' || source[pos] == '\t' || source[pos] == '\r' ||
+                                   source[pos] == '\n' || source[pos] == '\f' || source[pos] == '\v'))
+      ++pos;
+    if (source.substr(pos, 2) == "/*") {
+      const auto end = source.find("*/", pos + 2);
+      if (end == source.npos)
+        continue;
+      pos = end + 2;
+    }
+    if (source.substr(pos, 2) == "//") {
+      const auto end = source.find('\n', pos + 2);
+      pos = end == source.npos ? source.size() : end + 1;
+    }
+    while (pos < source.size() && (source[pos] == ' ' || source[pos] == '\t' || source[pos] == '\r' ||
+                                   source[pos] == '\n' || source[pos] == '\f' || source[pos] == '\v'))
+      ++pos;
+    if (pos < source.size() && source[pos] == '(')
+      return true;
+  }
   return false;
+}
+
+// Closure markers are macro arguments, so eligibility must not depend on a
+// successful ordinary C parse. As with defer scanning, false positives are
+// harmless because libclang validates the actual expansion later.
+inline bool may_contain_closure(std::string_view source) {
+  for (const auto name : {std::string_view{"recast_closure"}, std::string_view{"recast_call"},
+                          std::string_view{"recast_bind"}}) {
+    std::size_t position = 0;
+    while ((position = source.find(name, position)) != source.npos) {
+      if (is_keyword_at(source, position, name))
+        return true;
+      position += name.size();
+    }
+  }
+  return false;
+}
+
+inline bool may_contain_transform(std::string_view source) {
+  return may_contain_defer(source) || may_contain_closure(source);
 }
 
 inline std::string escape_depfile(std::string_view value) {

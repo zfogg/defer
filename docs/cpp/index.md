@@ -1,4 +1,4 @@
-```{include} ../../cpp/README.md
+```{include} ../../README.md
 ```
 
 ```{toctree}
