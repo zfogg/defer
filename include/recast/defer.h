@@ -35,7 +35,7 @@ void __recast_defer_marker(void);
 #define DEFER_NAMED(name, ...) do { __recast_defer_marker(); } while (0)
 #define DEFER_CANCEL(name) do { __recast_defer_marker(); } while (0)
 #else
-#define DEFER(...) _Static_assert(0, "DEFER() requires the source transformation")
-#define DEFER_NAMED(name, ...) _Static_assert(0, "DEFER_NAMED() requires the source transformation")
-#define DEFER_CANCEL(name) _Static_assert(0, "DEFER_CANCEL() requires the source transformation")
+#define DEFER(...) do { } while (0)
+#define DEFER_NAMED(name, ...) do { } while (0)
+#define DEFER_CANCEL(name) do { } while (0)
 #endif
