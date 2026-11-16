@@ -1,4 +1,4 @@
-"""Build and validate one self-contained defer release archive."""
+"""Build and validate one self-contained Recast release archive."""
 from __future__ import annotations
 
 import argparse
@@ -64,7 +64,7 @@ def configure_llvm(work: Path, source: Path, jobs: int) -> Path:
     cxx = "clang-cl" if windows else "/usr/bin/clang++" if sys.platform == "darwin" else "clang++"
     args = ["cmake", "-S", source / "llvm", "-B", build, "-G", "Ninja",
             "-DCMAKE_BUILD_TYPE=Release", f"-DCMAKE_C_COMPILER={compiler}", f"-DCMAKE_CXX_COMPILER={cxx}",
-            "-DLLVM_ENABLE_PROJECTS=clang", "-DLLVM_TARGETS_TO_BUILD=all", "-DLIBCLANG_BUILD_STATIC=ON",
+            "-DLLVM_ENABLE_PROJECTS=clang", "-DLLVM_TARGETS_TO_BUILD=X86;AArch64", "-DLIBCLANG_BUILD_STATIC=ON",
             "-DLLVM_INCLUDE_TESTS=OFF", "-DCLANG_INCLUDE_TESTS=OFF", "-DLLVM_INCLUDE_EXAMPLES=OFF",
             "-DLLVM_INCLUDE_BENCHMARKS=OFF", "-DLLVM_INCLUDE_DOCS=OFF", "-DCLANG_INCLUDE_DOCS=OFF",
             "-DLLVM_ENABLE_TERMINFO=OFF", "-DLLVM_ENABLE_LIBEDIT=OFF",
@@ -73,9 +73,9 @@ def configure_llvm(work: Path, source: Path, jobs: int) -> Path:
             "-DLLVM_ENABLE_CURL=OFF"]
     if windows:
         args += ["-DLLVM_ENABLE_PIC=OFF", "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded", "-DLLVM_USE_CRT_RELEASE=MT"]
-        if os.environ.get("DEFER_COMPILER_TARGET"):
-            args += [f"-DCMAKE_C_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}",
-                     f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}"]
+        if os.environ.get("RECAST_COMPILER_TARGET"):
+            args += [f"-DCMAKE_C_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}",
+                     f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}"]
     run(*args)
     run("cmake", "--build", build, "--target", "libclang" if windows else "libclang_static", "--parallel", jobs)
     return build
@@ -83,7 +83,7 @@ def configure_llvm(work: Path, source: Path, jobs: int) -> Path:
 
 def combine_archives(stage: Path, llvm: Path) -> None:
     windows = sys.platform == "win32"
-    sdk = stage / "lib" / ("defer-static.lib" if windows else "libdefer-static.a")
+    sdk = stage / "lib" / ("recast-static.lib" if windows else "librecast-static.a")
     archives = [sdk, *sorted((llvm / "lib").glob("*.lib" if windows else "*.a"))]
     if sys.platform == "darwin":
         # Darwin's libtool rejects LLVM's auxiliary target file. The actual
@@ -148,18 +148,18 @@ find_package(Threads REQUIRED)
 add_library(sdk_static STATIC IMPORTED)
 add_library(sdk_shared SHARED IMPORTED)
 if(WIN32)
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/defer-static.lib")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_IMPLIB "${SDK_ROOT}/lib/defer-shared.lib" IMPORTED_LOCATION "${SDK_ROOT}/bin/defer-shared.dll")
+  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/recast-static.lib")
+  set_target_properties(sdk_shared PROPERTIES IMPORTED_IMPLIB "${SDK_ROOT}/lib/recast-shared.lib" IMPORTED_LOCATION "${SDK_ROOT}/bin/recast-shared.dll")
 elseif(APPLE)
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/libdefer-static.a")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/libdefer-shared.dylib")
+  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-static.a")
+  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-shared.dylib")
 else()
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/libdefer-static.a")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/libdefer-shared.so")
+  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-static.a")
+  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-shared.so")
 endif()
 foreach(kind static shared)
   add_executable(smoke_${kind} main.cpp)
-  target_compile_features(smoke_${kind} PRIVATE cxx_std_17)
+  target_compile_features(smoke_${kind} PRIVATE cxx_std_23)
   target_include_directories(smoke_${kind} PRIVATE "${SDK_ROOT}/include")
   target_link_libraries(smoke_${kind} PRIVATE sdk_${kind} Threads::Threads ${CMAKE_DL_LIBS})
   if(WIN32)
@@ -172,12 +172,12 @@ endforeach()
     configure = ["cmake", "-S", source, "-B", build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
                  "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
                  f"-DCMAKE_CXX_COMPILER={cxx}", f"-DSDK_ROOT={stage}"]
-    if sys.platform == "win32" and os.environ.get("DEFER_COMPILER_TARGET"):
-        configure.append(f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}")
+    if sys.platform == "win32" and os.environ.get("RECAST_COMPILER_TARGET"):
+        configure.append(f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}")
     run(*configure)
     run("cmake", "--build", build)
     if sys.platform == "win32":
-        shutil.copyfile(stage / "bin/defer-shared.dll", build / "defer-shared.dll")
+        shutil.copyfile(stage / "bin/recast-shared.dll", build / "recast-shared.dll")
     for kind in ("static", "shared"):
         executable = build / (f"smoke_{kind}.exe" if sys.platform == "win32" else f"smoke_{kind}")
         if subprocess.check_output([executable, stage / "include"], text=True) != "SDK smoke test\n":
@@ -189,23 +189,23 @@ def main() -> None:
     parser.add_argument("--name", required=True)
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--jobs", type=int, default=2)
+    parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--musl", action="store_true")
     args = parser.parse_args()
     work = args.work.resolve()
     work.mkdir(parents=True, exist_ok=True)
     source = download_source(work)
     llvm = configure_llvm(work, source, args.jobs)
-    build = work / "defer-build"
+    build = work / "recast-build"
     stage = work / "stage"
     compiler = "clang-cl" if sys.platform == "win32" else "/usr/bin/clang" if sys.platform == "darwin" else "clang"
     cxx = "clang-cl" if sys.platform == "win32" else "/usr/bin/clang++" if sys.platform == "darwin" else "clang++"
     configure = ["cmake", "-S", ROOT, "-B", build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
-        f"-DCMAKE_C_COMPILER={compiler}", f"-DCMAKE_CXX_COMPILER={cxx}", f"-DDEFER_LLVM_DEV_ROOT={llvm}",
-        "-DDEFER_STATIC_LIBCLANG=ON", f"-DDEFER_FULLY_STATIC_EXECUTABLE={'ON' if args.musl else 'OFF'}"]
-    if sys.platform == "win32" and os.environ.get("DEFER_COMPILER_TARGET"):
-        configure += [f"-DCMAKE_C_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}",
-                      f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}"]
+        f"-DCMAKE_C_COMPILER={compiler}", f"-DCMAKE_CXX_COMPILER={cxx}", f"-DRECAST_LLVM_DEV_ROOT={llvm}",
+        "-DRECAST_STATIC_LIBCLANG=ON", f"-DRECAST_FULLY_STATIC_EXECUTABLE={'ON' if args.musl else 'OFF'}"]
+    if sys.platform == "win32" and os.environ.get("RECAST_COMPILER_TARGET"):
+        configure += [f"-DCMAKE_C_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}",
+                      f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}"]
     run(*configure)
     run("cmake", "--build", build, "--parallel", args.jobs)
     run("ctest", "--test-dir", build, "--output-on-failure")
@@ -216,35 +216,35 @@ def main() -> None:
     shutil.copytree(source / "clang/include/clang-c", stage / "include/clang-c", dirs_exist_ok=True)
     combine_archives(stage, llvm)
     verify_sdk(work, stage, cxx)
-    binary = stage / "bin" / ("defer-tool.exe" if sys.platform == "win32" else "defer-tool")
+    binary = stage / "bin" / ("recast.exe" if sys.platform == "win32" else "recast")
     run(binary, "--help")
     verify_linkage(binary, args.musl)
-    shared = stage / ("bin/defer-shared.dll" if sys.platform == "win32" else
-                      "lib/libdefer-shared.dylib" if sys.platform == "darwin" else "lib/libdefer-shared.so")
+    shared = stage / ("bin/recast-shared.dll" if sys.platform == "win32" else
+                      "lib/librecast-shared.dylib" if sys.platform == "darwin" else "lib/librecast-shared.so")
     verify_linkage(shared)
-    generated = work / "Defer.cmake"
+    generated = work / "Recast.cmake"
     run(binary, "cmake-config", "--write-file", generated)
-    if generated.read_bytes().replace(b"\r\n", b"\n") != (ROOT / "Defer.cmake").read_bytes().replace(b"\r\n", b"\n"):
+    if generated.read_bytes().replace(b"\r\n", b"\n") != (ROOT / "Recast.cmake").read_bytes().replace(b"\r\n", b"\n"):
         raise RuntimeError("embedded CMake configuration differs from source")
     output = work / "hello.c"
     run(binary, ROOT / "examples/hello_world/main.c", output, "--", f"-I{stage / 'include'}")
     executable = work / ("hello.exe" if sys.platform == "win32" else "hello")
-    target_flag = [f"--target={os.environ['DEFER_COMPILER_TARGET']}"] if os.environ.get("DEFER_COMPILER_TARGET") else []
+    target_flag = [f"--target={os.environ['RECAST_COMPILER_TARGET']}"] if os.environ.get("RECAST_COMPILER_TARGET") else []
     direct_compiler = "/usr/bin/clang" if sys.platform == "darwin" else "clang"
     run(direct_compiler, *target_flag, output, f"-I{stage / 'include'}", "-o", executable)
     if subprocess.check_output([executable], text=True).splitlines() != ["hello", "goodbye"]:
         raise RuntimeError("hello-world output was incorrect")
     example_build = work / "example-build"
     example_configure = ["cmake", "-S", ROOT / "examples/hello_world_cmake", "-B", example_build, "-G", "Ninja",
-        f"-DCMAKE_C_COMPILER={compiler}", f"-DDEFER_MODULE={generated}", f"-DDEFER_TOOL={binary}",
-        f"-DDEFER_INCLUDE_DIR={stage / 'include'}"]
-    if os.environ.get("DEFER_COMPILER_TARGET"):
-        example_configure.append(f"-DCMAKE_C_COMPILER_TARGET={os.environ['DEFER_COMPILER_TARGET']}")
+        f"-DCMAKE_C_COMPILER={compiler}", f"-DRECAST_MODULE={generated}", f"-DRECAST_TOOL={binary}",
+        f"-DRECAST_INCLUDE_DIR={stage / 'include'}"]
+    if os.environ.get("RECAST_COMPILER_TARGET"):
+        example_configure.append(f"-DCMAKE_C_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}")
     run(*example_configure)
     run("cmake", "--build", example_build)
     run(example_build / ("hello.exe" if sys.platform == "win32" else "hello"))
     args.output.mkdir(parents=True, exist_ok=True)
-    archive = args.output / f"defer-{args.name}.zip"
+    archive = args.output / f"recast-{args.name}.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zip_file:
         for path in stage.rglob("*"):
             if path.is_file():

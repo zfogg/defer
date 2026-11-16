@@ -9,6 +9,7 @@
 #include <atomic>
 #include <clang-c/Index.h>
 #include <exception>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -40,6 +41,39 @@
 #endif
 
 namespace {
+const char *environment_value(const char *name) {
+  const char *value = std::getenv(name);
+  return value && *value ? value : nullptr;
+}
+
+std::string environment_string(const char *name, std::string fallback = {}) {
+  if (const char *value = environment_value(name))
+    return value;
+  return fallback;
+}
+
+unsigned environment_unsigned(const char *name, unsigned fallback = 0) {
+  const char *value = environment_value(name);
+  if (!value)
+    return fallback;
+  char *end = nullptr;
+  const unsigned long parsed = std::strtoul(value, &end, 10);
+  if (end == value || *end != '\0' || parsed > std::numeric_limits<unsigned>::max())
+    return fallback;
+  return static_cast<unsigned>(parsed);
+}
+
+bool environment_flag(const char *name, bool fallback = false) {
+  const char *value = environment_value(name);
+  if (!value)
+    return fallback;
+  return llvm::StringSwitch<bool>(value)
+      .Case("1", true).Case("ON", true).Case("TRUE", true)
+      .Case("on", true).Case("true", true)
+      .Case("0", false).Case("OFF", false).Case("FALSE", false)
+      .Case("off", false).Case("false", false).Default(fallback);
+}
+
 llvm::cl::opt<bool> scan_only("scan", llvm::cl::desc("List source files containing possible defer calls"));
 llvm::cl::opt<std::string> scan_input("scan-input", llvm::cl::desc("Read source paths from a UTF-8 file"));
 llvm::cl::opt<std::string> plan_records("plan-records", llvm::cl::desc("Plan source/output records"));
@@ -54,22 +88,29 @@ llvm::cl::opt<std::string> depfile("depfile", llvm::cl::desc("Write header depen
 llvm::cl::opt<bool> dependency_stamps("dependency-stamps", llvm::cl::desc("Write per-output dependency stamps"));
 llvm::cl::opt<bool> incremental("incremental", llvm::cl::desc("Reuse unchanged batch transformations"));
 llvm::cl::opt<bool> preamble("preamble", llvm::cl::desc("Experimentally reuse Clang preambles for validation"));
-llvm::cl::opt<std::string> shared_cache("shared-cache", llvm::cl::desc("Directory for reusable transformation cache"));
+llvm::cl::opt<std::string> shared_cache(
+    "shared-cache", llvm::cl::desc("Directory for reusable transformation cache"),
+    llvm::cl::init(environment_string("RECAST_SHARED_CACHE")));
 llvm::cl::opt<std::string> header_overlay("header-overlay",
                                           llvm::cl::desc("Write an experimental per-source Clang header overlay"));
 llvm::cl::opt<bool>
     header_overlays("header-overlays",
-                    llvm::cl::desc("Write an experimental Clang header overlay for every batch source"));
+                    llvm::cl::desc("Write an experimental Clang header overlay for every batch source"),
+                    llvm::cl::init(environment_flag("RECAST_HEADER_OVERLAYS")));
 llvm::cl::opt<std::string>
     batch("batch",
           llvm::cl::desc("Transform manifest source/output pairs with optional per-file JSON argument arrays"));
 llvm::cl::opt<std::string> stream_filename("filename", llvm::cl::desc("Required virtual input path for stdin"));
 llvm::cl::opt<unsigned> jobs("jobs", llvm::cl::desc("Maximum concurrent transformations (default: available cores)"),
-                             llvm::cl::init(0));
+                             llvm::cl::init(environment_unsigned("RECAST_JOBS")));
 llvm::cl::opt<std::string> libclang("libclang", llvm::cl::desc("Path to the libclang shared library"));
 llvm::cl::opt<std::string> explain_location("explain", llvm::cl::desc("Explain cleanup at source:line"));
 llvm::cl::opt<std::string> show_location("show-transformed",
                                          llvm::cl::desc("Show the transformed function at source:line"));
+llvm::cl::opt<std::string> transforms(
+    "transforms",
+    llvm::cl::desc("Comma-separated transformation passes (defer, closures; closures run before defer)"),
+    llvm::cl::init(environment_string("RECAST_TRANSFORMS", "all")));
 
 using FileMetadata = std::pair<long long, std::uintmax_t>;
 
@@ -144,7 +185,8 @@ bool restore_shared(const std::filesystem::path &root, const std::string &key, c
     if (!result.inputs.count(fs::weakly_canonical(fs::absolute(source)).u8string()))
       return false;
     auto parse_arguments = arguments;
-    parse_arguments.push_back("-DDEFER_PARSING=1");
+    parse_arguments.push_back("-DRECAST_DEFER_PARSING=1");
+    parse_arguments.push_back("-DRECAST_CLOSURE_PARSING=1");
     std::vector<const char *> raw;
     for (const auto &argument : parse_arguments)
       raw.push_back(argument.c_str());
@@ -219,9 +261,9 @@ bool metadata(const std::filesystem::path &path, FileMetadata &result) {
 
 std::string cache_context(const char *program) {
   std::string context = "defer-cache-v2\n";
-#ifdef DEFER_BUILD_ID
+#ifdef RECAST_BUILD_ID
   (void)program;
-  context += DEFER_BUILD_ID "\n";
+  context += RECAST_BUILD_ID "\n";
 #else
   try {
     context += digest(defer_tool::read_file(std::filesystem::u8path(program))) + "\n";
@@ -291,7 +333,7 @@ int main(int argc, char **argv) {
       output << defer_cmake_config;
       return output ? 0 : 1;
     }
-    std::cerr << "defer-tool: usage: defer-tool cmake-config [--write-file PATH]\n";
+    std::cerr << "recast: usage: recast cmake-config [--write-file PATH]\n";
     return 1;
   }
   llvm::InitLLVM initializer(argc, argv);
@@ -300,6 +342,23 @@ int main(int argc, char **argv) {
       "defer source transformer\n"
       "With redirected stdin and no input/output paths, transform one source to stdout.\n");
   try {
+    if (transforms.empty())
+      throw std::runtime_error("--transforms requires at least one transformation pass");
+    std::set<std::string> enabled_transforms;
+    std::stringstream transform_list(transforms.getValue());
+    std::string transform_name;
+    while (std::getline(transform_list, transform_name, ',')) {
+      if (transform_name.empty())
+        throw std::runtime_error("--transforms contains an empty transformation name");
+      if (transform_name == "all") {
+        enabled_transforms.insert("defer");
+        enabled_transforms.insert("closures");
+        continue;
+      }
+      if (transform_name != "defer" && transform_name != "closures")
+        throw std::runtime_error("unknown transformation pass: " + transform_name);
+      enabled_transforms.insert(transform_name);
+    }
     const bool dash_stream = sources.size() >= 2 && sources[0] == "-" && sources[1] == "-";
     unsigned separator = static_cast<unsigned>(argc);
     for (int i = 1; i < argc; ++i)
@@ -334,12 +393,13 @@ int main(int argc, char **argv) {
         while (std::getline(lines, source)) {
           if (!source.empty() && source.back() == '\r')
             source.pop_back();
-          if (!source.empty() && defer_tool::may_contain_defer(defer_tool::read_file(std::filesystem::u8path(source))))
+          if (!source.empty() &&
+              defer_tool::may_contain_transform(defer_tool::read_file(std::filesystem::u8path(source))))
             llvm::outs() << source << '\n';
         }
       }
       for (const auto &source : sources)
-        if (defer_tool::may_contain_defer(defer_tool::read_file(std::filesystem::u8path(source))))
+        if (defer_tool::may_contain_transform(defer_tool::read_file(std::filesystem::u8path(source))))
           llvm::outs() << source << '\n';
       return 0;
     }
@@ -355,6 +415,8 @@ int main(int argc, char **argv) {
       defer_tool::verify_libclang(std::filesystem::u8path(libclang.getValue()));
     defer_tool::DriverOptions options;
     options.preamble = preamble;
+    options.enable_defer = enabled_transforms.count("defer") != 0;
+    options.enable_closures = enabled_transforms.count("closures") != 0;
     if (!header_overlay.empty())
       options.header_overlay = std::filesystem::absolute(std::filesystem::u8path(header_overlay.getValue()));
     if (!compilation_database.empty())
@@ -684,12 +746,12 @@ int main(int argc, char **argv) {
     if (!depfile_path.empty())
       defer_tool::write_depfile(depfile_path, dependencies);
     if (incremental)
-      llvm::errs() << "defer-tool: transformed " << std::count(cached.begin(), cached.end(), false) << " of "
+      llvm::errs() << "recast: transformed " << std::count(cached.begin(), cached.end(), false) << " of "
                    << inputs.size() << " files (" << std::count(restored.begin(), restored.end(), true)
                    << " restored from shared cache)\n";
     return 0;
   } catch (const std::exception &error) {
-    llvm::errs() << "defer-tool: " << error.what() << '\n';
+    llvm::errs() << "recast: " << error.what() << '\n';
     return 1;
   }
 }

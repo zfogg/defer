@@ -29,7 +29,7 @@ if sys.platform == "darwin":
     hawkmoth_clang.extend(["-isysroot", sdk])
 if os.environ.get("LLVM_INCLUDE_DIR"):
     hawkmoth_clang.append(f"-I{os.environ['LLVM_INCLUDE_DIR']}")
-hawkmoth_clang_cpp = ["-std=c++17"]
+hawkmoth_clang_cpp = ["-std=c++23"]
 if sys.platform == "darwin":
     libcxx = Path(compiler).resolve().parent.parent / "include/c++/v1" if compiler else Path()
     if not compiler or not libcxx.is_dir():

@@ -38,7 +38,7 @@ def main() -> int:
         key = tuple(sorted(set(filter(None, prerequisites.split(";")))))
         batches[key].append((target, source, output))
 
-    generated_dir = args.build_dir / "defer_transformed"
+    generated_dir = args.build_dir / "recast_transformed"
     rules: list[str] = []
     for prerequisites, entries in sorted(batches.items()):
         identity = json.dumps([args.stage, prerequisites], ensure_ascii=True)
@@ -52,20 +52,23 @@ def main() -> int:
         stamps = " ".join(cmake_literal(Path(output).parent.as_posix() + ".deps") for _, _, output in entries)
         overlays = " ".join(cmake_literal(Path(output).parent.as_posix() + ".vfs.json") for _, _, output in entries) if args.header_overlays else ""
         overlay_argument = "--header-overlays" if args.header_overlays else ""
+        header_environment = "ON" if args.header_overlays else "OFF"
         targets = sorted({target for target, _, _ in entries})
-        name = cmake_literal(f"defer-{batch_id}")
+        name = cmake_literal(f"recast-{batch_id}")
         rules.append(f"""add_custom_command(
     OUTPUT {outputs} {stamps} {overlays}
-    COMMAND ${{DEFER_PYTHON_COMMAND}} "${{DEFER_TOOL_ROOT}}/python/defer.py"
-        --batch {cmake_literal(manifest.as_posix())} --libclang "${{DEFER_LIBCLANG_PATH}}"
-        --compilation-database "${{CMAKE_BINARY_DIR}}" --depfile {cmake_literal(depfile.as_posix())} --dependency-stamps --jobs "${{DEFER_JOBS}}" {overlay_argument}
+    COMMAND "${{CMAKE_COMMAND}}" -E env
+        "RECAST_HEADER_OVERLAYS={header_environment}"
+        ${{RECAST_PYTHON_COMMAND}} "${{RECAST_TOOL_ROOT}}/python/defer.py"
+        --transforms "${{RECAST_TRANSFORMS}}" --batch {cmake_literal(manifest.as_posix())} --libclang "${{RECAST_LIBCLANG_PATH}}"
+        --compilation-database "${{CMAKE_BINARY_DIR}}" --depfile {cmake_literal(depfile.as_posix())} --dependency-stamps {overlay_argument}
     DEPENDS {sources} {cmake_literal(manifest.as_posix())}
-        "${{DEFER_TOOL_ROOT}}/python/defer.py"
-        "${{DEFER_TOOL_ROOT}}/python/analysis.py"
-        "${{DEFER_TOOL_ROOT}}/python/manifest.py"
-        "${{DEFER_TOOL_ROOT}}/pyproject.toml"
-        "${{DEFER_TOOL_ROOT}}/uv.lock"
-        "${{DEFER_TOOL_ROOT}}/python/vendor/clang/cindex.py"
+        "${{RECAST_TOOL_ROOT}}/python/defer.py"
+        "${{RECAST_TOOL_ROOT}}/python/analysis.py"
+        "${{RECAST_TOOL_ROOT}}/python/manifest.py"
+        "${{RECAST_TOOL_ROOT}}/pyproject.toml"
+        "${{RECAST_TOOL_ROOT}}/uv.lock"
+        "${{RECAST_TOOL_ROOT}}/python/vendor/clang/cindex.py"
         "${{CMAKE_BINARY_DIR}}/compile_commands.json"
     DEPFILE {cmake_literal(depfile.as_posix())}
     COMMENT "Transforming defer source batch" VERBATIM)

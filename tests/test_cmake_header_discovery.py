@@ -21,11 +21,11 @@ def test_discovery_tracks_included_objc_files(tmp_path: Path, extension: str) ->
     project.mkdir()
     objc = project / f"included.{extension}"
     objc.write_text("#define OBJC_CLEANUP(action) defer(action)\n", encoding="utf-8")
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     (project / "CMakeLists.txt").write_text(
         'cmake_minimum_required(VERSION 3.25)\nproject(scan LANGUAGES NONE)\n'
         f'include("{module}")\nset(_batch_stage test)\n'
-        'defer_scan_targets(selected)\nget_property(wrappers GLOBAL PROPERTY DEFER_WRAPPER_NAMES)\n'
+        'recast_scan_targets(selected)\nget_property(wrappers GLOBAL PROPERTY RECAST_WRAPPER_NAMES)\n'
         'file(WRITE "${CMAKE_BINARY_DIR}/result.txt" "${wrappers}")\n',
         encoding="utf-8",
     )
@@ -62,15 +62,15 @@ def test_discovery_prunes_environments_and_keeps_explicit_roots(tmp_path: Path) 
         linked.mkdir()
         (linked / "linked.h").write_text("#define SYMLINKED(action) defer(action)\n", encoding="utf-8")
         (project / "src" / "link").symlink_to(linked, target_is_directory=True)
-    module = (ROOT / "Defer.cmake").as_posix()
+    module = (ROOT / "Recast.cmake").as_posix()
     (project / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.25)\nproject(scan LANGUAGES NONE)\n"
-        'set(DEFER_SOURCE_ROOT "${CMAKE_SOURCE_DIR}")\nset(DEFER_SOURCE_DIRS src CACHE STRING "")\n'
-        f'set(DEFER_WRAPPER_HEADER_DIRS "{external.as_posix()};{build.as_posix()}" CACHE STRING "")\n'
+        'set(RECAST_SOURCE_ROOT "${CMAKE_SOURCE_DIR}")\nset(RECAST_SOURCE_DIRS src CACHE STRING "")\n'
+        f'set(RECAST_WRAPPER_HEADER_DIRS "{external.as_posix()};{build.as_posix()}" CACHE STRING "")\n'
         f'include("{module}")\nset(_batch_stage test)\n'
-        "defer_scan_targets(selected)\n"
-        "get_property(wrappers GLOBAL PROPERTY DEFER_WRAPPER_NAMES)\n"
-        "get_property(overlays GLOBAL PROPERTY DEFER_HEADER_ACTIVE)\n"
+        "recast_scan_targets(selected)\n"
+        "get_property(wrappers GLOBAL PROPERTY RECAST_WRAPPER_NAMES)\n"
+        "get_property(overlays GLOBAL PROPERTY RECAST_HEADER_ACTIVE)\n"
         'file(WRITE "${CMAKE_BINARY_DIR}/scan-result.txt" "${wrappers}|${overlays}")\n',
         encoding="utf-8",
     )

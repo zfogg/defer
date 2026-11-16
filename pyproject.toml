@@ -1,7 +1,7 @@
 [project]
-name = "defer-tool"
+name = "recast"
 version = "0.1.0"
-description = "Clang-based defer source transformation"
+description = "Clang-based C source transformation pipeline"
 readme = "python/README.md"
 license-files = ["LICENSE", "python/vendor/LICENSE-LLVM.txt"]
 requires-python = ">=3.10"
@@ -17,7 +17,7 @@ packages = ["clang"]
 py-modules = ["defer", "analysis", "manifest", "plan", "scan"]
 
 [tool.setuptools.data-files]
-"share/defer" = ["Defer.cmake"]
+"share/recast" = ["Recast.cmake"]
 
 [dependency-groups]
 dev = [

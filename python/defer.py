@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
 import functools
 import hashlib
 import importlib.metadata
@@ -165,7 +164,6 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
     os.chdir(command.directory)
     result = ["-iquote", str(source.resolve().parent)]
     emscripten = "emcc" in compiler or "em++" in compiler
-    msvc_compiler = Path(compiler).name.lower() in ("cl.exe", "cl")
     if emscripten:
         result.extend(emscripten_driver_defaults(compiler))
     index = 0
@@ -178,10 +176,10 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
         ):
             index += 4
             continue
-        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd", "/Yu", "/Fp"):
+        if value in ("-o", "-MF", "-MT", "-MQ", "/Fo", "/Fd"):
             index += 2
             continue
-        if value.startswith(("/Fo", "/Fd", "/Yu", "/Fp")):
+        if value.startswith(("/Fo", "/Fd")):
             index += 1
             continue
         if (value == "-ivfsoverlay" and index + 1 < len(arguments)
@@ -214,56 +212,7 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             continue
         result.append(value)
         index += 1
-    if msvc_compiler:
-        normalized: list[str] = []
-        index = 0
-        while index < len(result):
-            value = result[index]
-            if value == "--driver-mode=cl":
-                index += 1
-                continue
-            elif value in ("-clang:-I", "-clang:-iquote", "-clang:-isystem") and index + 1 < len(result):
-                include_flag = value[7:]
-                include_path = result[index + 1]
-                if include_path.startswith("-clang:"):
-                    include_path = include_path[7:]
-                normalized.extend((include_flag, include_path))
-                index += 2
-                continue
-            elif value.startswith("/I") and len(value) > 2:
-                normalized.extend(("-I", value[2:]))
-            elif value.startswith("/D") and len(value) > 2:
-                normalized.append("-D" + value[2:])
-            elif value.startswith("/FI") and len(value) > 3:
-                normalized.extend(("-include", value[3:]))
-            elif value.startswith("-std:"):
-                standard = value[5:]
-                # MSVC emits /std:clatest for C as well as C++. libclang
-                # accepts the C dialect spelling, not MSVC's driver alias.
-                if standard.lower() == "clatest":
-                    standard = "c2x"
-                normalized.append("-std=" + standard)
-            elif value.startswith("-clang:"):
-                normalized.append(value[7:])
-            elif value.lower() in ("/experimental:c11atomics", "/permissive-", "/fs"):
-                index += 1
-                continue
-            elif value.lower() in ("/od", "/zi", "/w4", "/mdd", "/md", "/rtc1", "/ehsc", "/ob0", "-mdd", "-zi"):
-                index += 1
-                continue
-            elif value.lower().startswith(("/external:i", "-external:i")):
-                normalized.extend(("-I", value[value.lower().index(":i") + 2:]))
-            elif value.lower().startswith(("/external:", "-external:")):
-                index += 1
-                continue
-            else:
-                normalized.append(value)
-            index += 1
-        result = normalized
-    # libclang can parse MSVC command lines directly, but cl.exe does not
-    # implement Clang's -print-resource-dir probe.  MSVC supplies its headers
-    # through the /I entries already present in compile_commands.json.
-    if not msvc_compiler and not any(value.startswith("-resource-dir") for value in result):
+    if not any(value.startswith("-resource-dir") for value in result):
         process = subprocess.run(
             [compiler, "-print-resource-dir"],
             capture_output=True,
@@ -271,25 +220,9 @@ def compilation_arguments(directory: Path, generated: Path, source: Path) -> lis
             check=False,
         )
         if process.returncode:
-            # GCC does not implement Clang's resource-dir query. libclang
-            # still needs Clang's builtin headers, so use the host Clang
-            # installation for that parser-only detail while preserving the
-            # selected compiler's actual include and define arguments.
-            clang = shutil.which("clang")
-            if not clang:
-                raise TransformError(
-                    f"cannot determine resource directory for {compiler}: {process.stderr}"
-                )
-            process = subprocess.run(
-                [clang, "-print-resource-dir"],
-                capture_output=True,
-                text=True,
-                check=False,
+            raise TransformError(
+                f"cannot determine resource directory for {compiler}: {process.stderr}"
             )
-            if process.returncode:
-                raise TransformError(
-                    f"cannot determine resource directory for {compiler} or {clang}: {process.stderr}"
-                )
         result.extend(["-resource-dir", process.stdout.strip()])
     return result
 
@@ -432,6 +365,12 @@ def check_libclang_version() -> None:
         raise TransformError(f"LLVM 19 or newer libclang required, found {version}")
 
 
+def validate_transforms(value: str) -> None:
+    transforms = value.replace(" ", "").split(",")
+    if transforms != ["all"] and any(transform not in {"defer"} for transform in transforms):
+        raise TransformError("the Python backend supports only the defer transformation")
+
+
 def batch_main() -> int:
     """Transform a CMake batch in one interpreter and emit one combined depfile."""
     parser = argparse.ArgumentParser(
@@ -443,9 +382,14 @@ def batch_main() -> int:
     parser.add_argument("--compilation-database", type=Path, help="database directory or compile_commands.json")
     parser.add_argument("--depfile", type=Path)
     parser.add_argument("--dependency-stamps", action="store_true")
-    parser.add_argument("--header-overlays", action="store_true")
-    parser.add_argument("--jobs", type=int, default=1, help="maximum concurrent transformations")
+    parser.add_argument("--transforms", default=os.environ.get("RECAST_TRANSFORMS", "all"))
+    parser.add_argument(
+        "--header-overlays",
+        action="store_true",
+        default=os.environ.get("RECAST_HEADER_OVERLAYS", "OFF").upper() in {"1", "ON", "TRUE"},
+    )
     args = parser.parse_args()
+    validate_transforms(args.transforms)
     if args.libclang:
         cindex.Config.set_library_file(str(args.libclang.resolve()))
     manifest = args.batch.resolve()
@@ -479,53 +423,24 @@ def batch_main() -> int:
         for index, overlay in enumerate(overlay_paths):
             if any(paths_alias(overlay, path) for path in [*protected, *overlay_paths[:index]]):
                 raise TransformError("header overlay must not overwrite a batch input or output")
-        def transform_one(index_record: tuple[int, ManifestRecord]) -> tuple[int, int, str]:
-            index, record = index_record
+        for index, record in enumerate(records):
             source, output = str(record.source), str(record.output)
             part = Path(str(Path(output).parent) + ".depfile")
-            command = [
-                sys.executable,
-                str(Path(original_argv[0]).resolve()),
-                *(["--libclang", str(args.libclang.resolve())] if args.libclang else []),
+            sys.argv = [
+                original_argv[0],
                 *(["--compilation-database", str(database)] if database else []),
                 *(["--depfile", str(part)] if depfile else []),
+                *(["--header-overlay", str(overlay_paths[index])] if args.header_overlays else []),
                 *(["--dependency-stamp", str(Path(output).parent) + ".deps"] if args.dependency_stamps else []),
                 source,
                 output,
                 *(["--", *record.arguments] if not database else []),
             ]
-            result = subprocess.run(command, cwd=original_cwd, capture_output=True, text=True, check=False)
-            return index, result.returncode, result.stderr
-
-        indexed_records = list(enumerate(records))
-        if args.jobs > 1 and not args.header_overlays and len(indexed_records) > 1:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
-                results = list(executor.map(transform_one, indexed_records))
-        else:
-            results = []
-            for index, record in indexed_records:
-                source, output = str(record.source), str(record.output)
-                part = Path(str(Path(output).parent) + ".depfile")
-                sys.argv = [
-                    original_argv[0],
-                    *(["--compilation-database", str(database)] if database else []),
-                    *(["--depfile", str(part)] if depfile else []),
-                    *(["--dependency-stamp", str(Path(output).parent) + ".deps"] if args.dependency_stamps else []),
-                    source,
-                    output,
-                    *(["--", *record.arguments] if not database else []),
-                ]
-                os.chdir(original_cwd)
-                current_protected = [*protected, *overlay_paths[:index], *overlay_paths[index + 1 :]] if args.header_overlays else None
-                results.append((index, main(current_protected), ""))
-
-        for index, result, error in sorted(results):
-            if result != 0:
-                if error:
-                    print(error, file=sys.stderr, end="")
+            os.chdir(original_cwd)
+            current_protected = [*protected, *overlay_paths[:index], *overlay_paths[index + 1 :]] if args.header_overlays else None
+            if main(current_protected) != 0:
                 return 1
             if depfile:
-                part = Path(str(Path(records[index].output).parent) + ".depfile")
                 target, inputs = part.read_text(encoding="utf-8").split(": ", 1)
                 if not primary:
                     primary = target
@@ -543,17 +458,17 @@ def batch_main() -> int:
 
 def main(protected_paths: list[Path] | None = None) -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "cmake-config":
-        config = Path(__file__).resolve().parent.parent / "Defer.cmake"
+        config = Path(__file__).resolve().parent.parent / "Recast.cmake"
         if not config.is_file():
             try:
                 package = importlib.metadata.distribution("defer-tool")
                 entry = next(
                     item for item in package.files or ()
-                    if item.as_posix().endswith("share/defer/Defer.cmake")
+                    if item.as_posix().endswith("share/recast/Recast.cmake")
                 )
                 config = Path(str(package.locate_file(entry)))
             except (importlib.metadata.PackageNotFoundError, StopIteration):
-                config = Path(sys.prefix) / "share" / "defer" / "Defer.cmake"
+                config = Path(sys.prefix) / "share" / "recast" / "Recast.cmake"
         parser = argparse.ArgumentParser(prog="defer-tool cmake-config")
         parser.add_argument("--write-file", type=Path)
         options = parser.parse_args(sys.argv[2:])
@@ -576,6 +491,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
     parser.add_argument("--compilation-database", type=Path)
     parser.add_argument("--depfile", type=Path)
     parser.add_argument("--dependency-stamp", type=Path)
+    parser.add_argument("--transforms", default=os.environ.get("RECAST_TRANSFORMS", "all"))
     parser.add_argument("--header-overlay", type=Path)
     parser.add_argument("--filename", help="required virtual input path for stdin")
     parser.add_argument("source", type=Path, nargs="?")
@@ -593,6 +509,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
         trailing_args = argv[separator + 1 :]
         argv = argv[:separator]
     args = parser.parse_args(argv)
+    validate_transforms(args.transforms)
     if args.libclang:
         cindex.Config.set_library_file(str(args.libclang.resolve()))
     clang_args = [*args.clang_args, *trailing_args]
@@ -625,7 +542,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
             check_libclang_version()
             source = sys.stdin.buffer.read()
             _, output = transform_input(cindex.Index.create(), path, source,
-                                        [*clang_args, "-DDEFER_PARSING=1"], objc)
+                                        [*clang_args, "-DRECAST_DEFER_PARSING=1"], objc)
             sys.stdout.buffer.write(output)
             sys.stdout.buffer.flush()
             return 0
@@ -645,7 +562,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
             if is_cpp_source(source_path, clang_args):
                 raise TransformError("C++ defer inspection is not supported; C++ uses native scope guards")
             source = source_path.read_bytes()
-            clang_args.append("-DDEFER_PARSING=1")
+            clang_args.append("-DRECAST_DEFER_PARSING=1")
             index = cindex.Index.create()
             tu, source = parse_wrapped(index, source_path, clang_args, source)
             transformer = Transformer(source_path, source, tu, objc=objc)
@@ -694,7 +611,7 @@ def main(protected_paths: list[Path] | None = None) -> int:
         if objc:
             require_objc_exceptions(clang_args)
         source = args.source.read_bytes()
-        clang_args.append("-DDEFER_PARSING=1")
+        clang_args.append("-DRECAST_DEFER_PARSING=1")
         check_libclang_version()
         index = cindex.Index.create()
         if args.header_overlay:

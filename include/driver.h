@@ -15,6 +15,8 @@ struct DriverOptions {
   std::vector<std::filesystem::path> protected_paths;
   std::vector<std::string> clang_arguments;
   bool preamble = false;
+  bool enable_defer = true;
+  bool enable_closures = false;
 };
 
 /** The generated output path and source files that affect it. */

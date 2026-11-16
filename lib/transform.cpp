@@ -79,7 +79,8 @@ public:
       if (kind == CXCursor_MacroDefinition)
         macro_definitions_[spelling(cursor)].push_back(cursor);
       if (kind == CXCursor_MacroExpansion &&
-          (spelling(cursor) == "defer" || spelling(cursor) == "defer_named" || spelling(cursor) == "defer_cancel")) {
+          (spelling(cursor) == "DEFER" || spelling(cursor) == "DEFER_NAMED" || spelling(cursor) == "DEFER_CANCEL" ||
+           spelling(cursor) == "defer" || spelling(cursor) == "defer_named" || spelling(cursor) == "defer_cancel")) {
         if (!in_file(cursor)) {
           if (allow_other_files_)
             continue;
@@ -174,8 +175,9 @@ std::set<std::string> Transformer::expanded_identifiers(const std::vector<Token>
   for (const auto &token : action_tokens)
     if (token.kind == CXToken_Identifier && found.insert(token.text).second)
       pending.push_back(token.text);
-  const std::set<std::string> forbidden = {"return", "goto",        "break",       "continue",
-                                           "defer",  "defer_named", "defer_cancel"};
+  const std::set<std::string> forbidden = {"return", "goto",        "break",          "continue",
+                                           "DEFER",  "DEFER_NAMED", "DEFER_CANCEL",
+                                           "defer", "defer_named", "defer_cancel"};
   while (!pending.empty()) {
     auto name = pending.back();
     pending.pop_back();
@@ -325,15 +327,22 @@ void Transformer::visit_function(CXCursor cursor) {
       }
     }
   }
-  for (auto child : children(cursor))
+  for (auto child : children(cursor)) {
     visit(child, kind);
+  }
 }
 
 void Transformer::visit_defer(CXCursor cursor, CXCursorKind parent) {
-  const auto start = begin(cursor);
+  auto start = begin(cursor);
   auto macro = macros_.find(start);
+  if (macro == macros_.end()) {
+    const auto expansion_start = offset(clang_getCursorLocation(cursor));
+    macro = macros_.find(expansion_start);
+    if (macro != macros_.end()) start = expansion_start;
+  }
+  if (macro == macros_.end()) return;
   const auto name = spelling(macro->second);
-  if (name != "defer_cancel" && parent != CXCursor_CompoundStmt)
+  if (name != "DEFER_CANCEL" && name != "defer_cancel" && parent != CXCursor_CompoundStmt)
     fail_at(start, "defer must be a direct statement in a block; add braces around the statement");
   const auto macro_end = end(macro->second);
   auto parts = tokens(unit_, clang_getCursorExtent(macro->second));
@@ -345,13 +354,13 @@ void Transformer::visit_defer(CXCursor cursor, CXCursorKind parent) {
   const auto argument = static_cast<std::size_t>(opening - parts.begin()) + 1;
   std::string handle;
   unsigned action_begin = opening->start + 1;
-  if (name != "defer") {
+  if (name != "DEFER" && name != "defer") {
     if (argument + 1 >= parts.size() || parts[argument].kind != CXToken_Identifier ||
-        parts[argument + 1].text != (name == "defer_named" ? "," : ")") ||
-        (name == "defer_cancel" && argument + 2 != parts.size()))
+        parts[argument + 1].text != ((name == "DEFER_NAMED" || name == "defer_named") ? "," : ")") ||
+        ((name == "DEFER_CANCEL" || name == "defer_cancel") && argument + 2 != parts.size()))
       fail_at(start, name + " requires a single identifier handle");
     handle = parts[argument].text;
-    if (name == "defer_cancel") {
+    if (name == "DEFER_CANCEL" || name == "defer_cancel") {
       for (auto scope = scopes_.rbegin(); scope != scopes_.rend(); ++scope)
         for (auto action = scope->actions.rbegin(); action != scope->actions.rend(); ++action)
           if (action->handle == handle) {
@@ -374,12 +383,13 @@ void Transformer::visit_defer(CXCursor cursor, CXCursorKind parent) {
     fail("empty defer at byte " + std::to_string(start));
   const auto action_start = action_begin + static_cast<unsigned>(raw_action.find_first_not_of(" \t\r\n\f\v"));
   const std::set<std::string> forbidden = {"return", "goto",        "break",       "continue",
-                                           "defer",  "defer_named", "defer_cancel"};
-  for (std::size_t i = name == "defer" ? 1 : argument + 2; i < parts.size(); ++i)
+                                           "DEFER",  "DEFER_NAMED", "DEFER_CANCEL",
+                                           "defer", "defer_named", "defer_cancel"};
+  for (std::size_t i = (name == "DEFER" || name == "defer") ? 1 : argument + 2; i < parts.size(); ++i)
     if (forbidden.count(parts[i].text))
       fail_at(start, "control transfer or nested defer inside cleanup is unsupported");
   std::vector<Token> action_tokens(
-      parts.begin() + std::min(name == "defer" ? std::size_t(1) : argument + 2, parts.size()), parts.end());
+      parts.begin() + std::min((name == "DEFER" || name == "defer") ? std::size_t(1) : argument + 2, parts.size()), parts.end());
   auto flag = "__defer_active_" + std::to_string(start);
   scopes_.back().actions.push_back({start, action_start, flag, action, expanded_identifiers(action_tokens), handle});
   edits_.push_back(
@@ -394,8 +404,9 @@ void Transformer::visit_block(CXCursor cursor, CXCursorKind parent) {
     edits_.push_back({start + 1, start + 1, function_prelude_ + " "});
   // Record registrations in source order; cleanup emits them in reverse order.
   scopes_.push_back({start, {}});
-  for (auto child : children(cursor))
+  for (auto child : children(cursor)) {
     visit(child, kind);
+  }
   const auto &actions = scopes_.back().actions;
   if (!actions.empty() && parent == CXCursor_SwitchStmt)
     fail_at(start, "defer directly in switch body is unsupported; use a case block");
@@ -414,7 +425,12 @@ void Transformer::visit_block(CXCursor cursor, CXCursorKind parent) {
                       action->text + "\n; } } ";
       edits_.push_back({finish - 1, finish - 1, finalizers});
     } else {
-      edits_.push_back({finish - 1, finish - 1, normal_cleanup});
+      unsigned cleanup_position = finish - 1;
+      if (parent == CXCursor_StmtExpr) {
+        const auto block_children = children(cursor);
+        if (!block_children.empty()) cleanup_position = begin(block_children.back());
+      }
+      edits_.push_back({cleanup_position, cleanup_position, normal_cleanup});
     }
   }
   scopes_.pop_back();
@@ -430,7 +446,7 @@ void Transformer::visit(CXCursor cursor, CXCursorKind parent) {
     visit_function(cursor);
     return;
   }
-  if (objc_ && kind == CXCursor_BlockExpr) {
+  if ((objc_ && kind == CXCursor_BlockExpr) || kind == CXCursor_StmtExpr || kind == CXCursor_UnexposedExpr) {
     auto outer_scopes = std::move(scopes_);
     auto outer_controls = std::move(controls_);
     auto outer_labels = std::move(labels_);
@@ -461,7 +477,8 @@ void Transformer::visit(CXCursor cursor, CXCursorKind parent) {
   }
   if (scopes_.empty() && kind != CXCursor_CompoundStmt)
     return;
-  if (macros_.count(start) && kind == CXCursor_DoStmt) {
+  if (kind == CXCursor_DoStmt &&
+      (macros_.count(start) || macros_.count(offset(clang_getCursorLocation(cursor))))) {
     visit_defer(cursor, parent);
     return;
   }
@@ -503,6 +520,8 @@ void Transformer::visit(CXCursor cursor, CXCursorKind parent) {
     return;
   }
   if (kind == CXCursor_ReturnStmt) {
+    for (auto child : children(cursor))
+      visit(child, kind);
     auto actions = cleanup(0, scopes_.size(), start);
     if (!actions.empty() && !objc_) {
       require_keyword(start, "return");
