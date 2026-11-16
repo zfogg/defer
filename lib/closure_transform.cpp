@@ -241,6 +241,8 @@ std::string transform_closures(const std::string &source) {
   }
 
   for (const auto &closure : closures) {
+    if (closure.result != "void")
+      throw std::runtime_error("Recast non-void closures require a portable result lowering");
     std::map<std::string, std::string> names;
     for (const auto &capture : closure.captures) {
       names.emplace(capture.name, capture.name);
@@ -252,7 +254,7 @@ std::string transform_closures(const std::string &source) {
       const auto open = output.find('(', pos + closure.name.size());
       const auto close = matching(output, open, '(', ')');
       auto call_parts = comma_parts(std::string_view(output).substr(open + 1, close - open - 1));
-      std::string expression = "({ ";
+      std::string expression = "{ ";
       if (!closure.parameters.empty() && closure.parameters != "void") {
         const auto declarations = comma_parts(closure.parameters);
         if (declarations.size() != call_parts.size())
@@ -289,7 +291,7 @@ std::string transform_closures(const std::string &source) {
         expression += closure.result + " " + result_expression + " = (" + closure.result + "){0}; ";
       expression += lowered_body;
       if (!result_expression.empty()) expression += " " + result_expression + ";";
-      expression += " })";
+      expression += " }";
       output.replace(pos, close - pos + 1, expression);
       pos += expression.size();
     }
