@@ -15,9 +15,9 @@
 int main() {
   auto manifest = defer_tool::Manifest::parse("a.c\tout/a.c\r\nb.c\tout/b.c\t[\"-I\",\"dir with spaces\"]\n", false);
   CHECK(manifest.records().size() == 2);
-  CHECK(manifest.records()[0].source.generic_u8string() == "a.c");
+  CHECK(manifest.records()[0].source.generic_string() == "a.c");
   CHECK(manifest.records()[0].arguments.empty());
-  CHECK(manifest.records()[1].output.generic_u8string() == "out/b.c");
+  CHECK(manifest.records()[1].output.generic_string() == "out/b.c");
   CHECK(manifest.records()[1].arguments.size() == 2);
   CHECK(manifest.records()[1].arguments[1] == "dir with spaces");
   CHECK(defer_tool::Manifest::parse("a.c\tout.c\t[\"x\\u2028y\"]\n", false).records()[0].arguments[0] ==

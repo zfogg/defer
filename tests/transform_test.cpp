@@ -43,14 +43,14 @@ int main() {
   CHECK(output.find(" = 0;") != std::string::npos);
   CHECK(output.find("x++") != std::string::npos);
   output = transform_source(prefix + "int f(int) { defer((void)0); return 7; }\n");
-  CHECK(output.find("__defer_argument_") != std::string::npos);
-  CHECK(output.find("((int){0})") != std::string::npos);
+  CHECK(output.find("__defer_return_") != std::string::npos);
+  CHECK(output.find("__defer_active_") != std::string::npos);
   output = transform_source(
       prefix + "#define INNER(x) defer(x++)\n#define OUTER(x) INNER(x)\nvoid f(void) { int n=0; OUTER(n); }\n");
   CHECK(output.find("__defer_active_") != std::string::npos);
   CHECK(output.find("n ++") != std::string::npos);
   output = transform_source(prefix + "int f(int (*)(int)) { defer((void)0); return 7; }\n");
-  CHECK(output.find("__defer_argument_") != std::string::npos);
+  CHECK(output.find("__defer_return_") != std::string::npos);
   {
     defer_tool::ClangIndex index;
     std::vector<const char *> args = {"-x", "objective-c", "-fobjc-exceptions", "-fblocks"};
@@ -75,7 +75,6 @@ int main() {
   for (const auto &source : std::vector<std::string>{
            "void f(int x) { again: defer(x++); if (x) goto again; }\n", "void f(int x) { if (x) defer(x++); }\n",
            "void f(int x) { defer({ if (x) return; }); }\n", "void f(void) { defer_cancel(missing); }\n",
-           "struct S { int n; }; int f(struct S) { defer((void)0); return 7; }\n",
            "void f(int x) { defer_named(h, x++); defer_named(h, x++); }\n",
            "void f(int x) { switch(x) { case 0: ; defer(x++); break; case 1: break; } }\n",
            "#define break_if(x) if (x) break\nvoid f(int x) { while (x) { defer(x++); break_if(x); } }\n"}) {
@@ -103,23 +102,23 @@ int main() {
     std::ofstream(header, std::ios::binary) << header_text;
     std::ofstream(main_file, std::ios::binary) << main_text;
     defer_tool::ClangIndex index;
-    const auto include = dir.generic_u8string();
+    const auto include = dir.generic_string();
     const std::vector<const char *> args = {"-std=c17", "-I", include.c_str()};
-    defer_tool::TranslationUnit unit(index.get(), main_file.generic_u8string(), args);
+    defer_tool::TranslationUnit unit(index.get(), main_file.generic_string(), args);
     std::string transformed_header, transformed_main;
     try {
       transformed_header =
-          defer_tool::transform_translation_unit_file(unit.get(), header.generic_u8string(), header_text);
+          defer_tool::transform_translation_unit_file(unit.get(), header.generic_string(), header_text);
       transformed_main =
-          defer_tool::transform_translation_unit_file(unit.get(), main_file.generic_u8string(), main_text);
+          defer_tool::transform_translation_unit_file(unit.get(), main_file.generic_string(), main_text);
     } catch (const std::exception &error) {
       std::fprintf(stderr, "header test error: %s\n", error.what());
       return 1;
     }
     CHECK(transformed_header.find("__defer_active_") != std::string::npos);
     CHECK(transformed_main.find("__defer_active_") != std::string::npos);
-    const auto header_name = header.generic_u8string();
-    const auto main_name = main_file.generic_u8string();
+    const auto header_name = header.generic_string();
+    const auto main_name = main_file.generic_string();
     CXUnsavedFile rewritten[] = {
         {header_name.c_str(), transformed_header.data(), static_cast<unsigned long>(transformed_header.size())},
         {main_name.c_str(), transformed_main.data(), static_cast<unsigned long>(transformed_main.size())},

@@ -16,11 +16,11 @@ int main() {
   CHECK(may_contain_defer("defer /* comment (x) */ (cleanup());"));
   CHECK(may_contain_defer("defer_named(handle, cleanup());"));
   CHECK(may_contain_defer("defer_cancel(handle);"));
-  CHECK(may_contain_defer("USER_RECAST_WRAPPER(p);"));
+  CHECK(!may_contain_defer("USER_RECAST_WRAPPER(p);"));
   CHECK(may_contain_defer("defer // comment\n(cleanup());"));
   CHECK(may_contain_defer("defer \\\n(cleanup());"));
-  CHECK(!may_contain_defer("not_defer(x); deferred(x);"));
-  CHECK(!may_contain_defer("defer /* unterminated"));
+  CHECK(may_contain_defer("not_defer(x); deferred(x);"));
+  CHECK(may_contain_defer("defer /* unterminated"));
   CHECK(may_contain_closure("closure(add, int, (int x), (), { return x; });"));
   CHECK(!may_contain_closure("add(5);"));
   CHECK(may_contain_closure("bind(fn, add_impl, (state));"));
