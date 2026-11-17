@@ -297,7 +297,8 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     // These diagnostics are GCC-only. The native transformer parses with
     // libclang, where forwarding them produces warnings for every source.
     if (value == "-Wlogical-op" || value == "-Wduplicated-cond" || value == "-Wduplicated-branches" ||
-        value == "-Wtrampolines") {
+        value == "-Wtrampolines" || value.rfind("-ftree-", 0) == 0 || value.rfind("-fno-tree-", 0) == 0 ||
+        value.rfind("-fipa-", 0) == 0 || value.rfind("-fno-ipa-", 0) == 0) {
       ++i;
       continue;
     }
