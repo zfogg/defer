@@ -340,6 +340,18 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
          value == "--target" || value == "-resource-dir" || value == "-Xclang" || value == "-D" || value == "-U" ||
          value == "-x") &&
         i + 1 < args.size()) {
+      // GCC's builtin headers are implementation details of the compiler in
+      // the compile database. They are not compatible with libclang's parser
+      // (notably GCC's stdatomic.h), so let the host Clang resource directory
+      // provide its own builtin headers while retaining the target sysroot.
+      if (value == "-isystem" &&
+          (args[i + 1].find("/lib/gcc/") != std::string::npos ||
+           args[i + 1].find("\\lib\\gcc\\") != std::string::npos ||
+           args[i + 1].find("/include-fixed") != std::string::npos ||
+           args[i + 1].find("\\include-fixed") != std::string::npos)) {
+        i += 2;
+        continue;
+      }
       result.push_back(value);
       result.push_back(args[i + 1]);
       i += 2;
