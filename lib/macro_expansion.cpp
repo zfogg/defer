@@ -56,7 +56,7 @@ std::string expand_defer_wrappers(CXTranslationUnit unit, const std::string &pat
     return {result, cyclic};
   };
   std::vector<Edit> edits;
-  const auto canonical = std::filesystem::weakly_canonical(std::filesystem::absolute(std::filesystem::u8path(path)));
+  const auto canonical = std::filesystem::weakly_canonical(std::filesystem::absolute(std::filesystem::path(path)));
   // Only expand invocations whose definition or arguments can contain defer;
   // unrelated macros retain the preprocessor's ordinary behavior.
   for (auto cursor : root) {
@@ -87,7 +87,7 @@ std::string expand_defer_wrappers(CXTranslationUnit unit, const std::string &pat
         throw wrapper_error("defer wrapper arguments containing __COUNTER__ cannot be expanded safely");
     }
     if (std::filesystem::weakly_canonical(
-            std::filesystem::absolute(std::filesystem::u8path(consume_string(clang_getFileName(file))))) != canonical) {
+            std::filesystem::absolute(std::filesystem::path(consume_string(clang_getFileName(file))))) != canonical) {
       if (allow_other_files)
         continue;
       throw wrapper_error("defer wrapper in included files is not supported; move the function into a C source file");

@@ -21,7 +21,7 @@ Manifest Manifest::parse(std::string_view text, bool compilation_database) {
     const auto output = line.substr(first + 1, third == std::string::npos ? third : third - first - 1);
     if (output.empty())
       throw std::runtime_error("invalid source/output batch record");
-    ManifestRecord record{std::filesystem::u8path(line.substr(0, first)), std::filesystem::u8path(output), {}};
+    ManifestRecord record{std::filesystem::path(line.substr(0, first)), std::filesystem::path(output), {}};
     if (third != std::string::npos) {
       if (compilation_database)
         throw std::runtime_error("per-file arguments cannot be combined with --compilation-database");

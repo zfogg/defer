@@ -185,7 +185,7 @@ bool restore_shared(const std::filesystem::path &root, const std::string &key, c
       if (separator == std::string::npos)
         return false;
       const auto name = denormalize_build_path(line.substr(0, separator), build);
-      const auto actual = file_digest(fs::u8path(name), known);
+      const auto actual = file_digest(fs::path(name), known);
       if (actual.rfind("volatile:", 0) == 0 || actual != line.substr(separator + 1))
         return false;
       result.inputs.insert(name);
@@ -207,21 +207,21 @@ bool restore_shared(const std::filesystem::path &root, const std::string &key, c
         unit.get(),
         [](CXFile file, CXSourceLocation *, unsigned, CXClientData opaque) {
           auto *names = static_cast<std::set<std::string> *>(opaque);
-          names->insert(fs::absolute(fs::u8path(defer_tool::consume_string(clang_getFileName(file))))
+          names->insert(fs::absolute(fs::path(defer_tool::consume_string(clang_getFileName(file))))
                             .lexically_normal()
                             .u8string());
         },
         &current);
     std::set<fs::path> expected_paths, current_paths;
     for (const auto &name : result.inputs)
-      expected_paths.insert(fs::weakly_canonical(fs::u8path(name)));
+      expected_paths.insert(fs::weakly_canonical(fs::path(name)));
     for (const auto &name : current)
-      current_paths.insert(fs::weakly_canonical(fs::u8path(name)));
+      current_paths.insert(fs::weakly_canonical(fs::path(name)));
     if (current_paths != expected_paths)
       return false;
     result.inputs = std::move(current);
     for (const auto &name : result.inputs) {
-      const auto input = fs::u8path(name);
+      const auto input = fs::path(name);
       std::error_code error;
       if (fs::weakly_canonical(output) == fs::weakly_canonical(input) ||
           (fs::exists(output) && fs::exists(input) && fs::equivalent(output, input, error) && !error))
@@ -243,7 +243,7 @@ void save_shared(const std::filesystem::path &root, const std::string &key, cons
     const auto content = defer_tool::read_file(file.output);
     std::string manifest = digest(content) + "\n";
     for (const auto &name : file.inputs) {
-      const auto hash = file_digest(std::filesystem::u8path(name), known);
+      const auto hash = file_digest(std::filesystem::path(name), known);
       if (hash.rfind("volatile:", 0) == 0)
         return;
       manifest += normalize_build_path(name, build) + "\t" + hash + "\n";
@@ -274,7 +274,7 @@ std::string cache_context(const char *program) {
   context += RECAST_BUILD_ID "\n";
 #else
   try {
-    context += digest(defer_tool::read_file(std::filesystem::u8path(program))) + "\n";
+    context += digest(defer_tool::read_file(std::filesystem::path(program))) + "\n";
   } catch (const std::exception &) {
     return {};
   }
@@ -289,8 +289,8 @@ bool cached_dependencies(const std::filesystem::path &source, const std::filesys
                          const std::string &context, std::map<std::string, FileMetadata> &metadata_cache,
                          defer_tool::FileDependencies &result) {
   namespace fs = std::filesystem;
-  const auto stamp = fs::u8path(output.parent_path().u8string() + ".deps");
-  const auto cache = fs::u8path(output.parent_path().u8string() + ".cache");
+  const auto stamp = fs::path(output.parent_path().u8string() + ".deps");
+  const auto cache = fs::path(output.parent_path().u8string() + ".cache");
   try {
     if (context.empty() || defer_tool::read_file(cache) != context || !fs::is_regular_file(output) ||
         fs::last_write_time(output) > fs::last_write_time(stamp))
@@ -307,12 +307,12 @@ bool cached_dependencies(const std::filesystem::path &source, const std::filesys
       const auto name = line.substr(0, first);
       const FileMetadata expected{std::stoll(line.substr(first + 1, size_separator - first - 1)),
                                   std::stoull(line.substr(size_separator + 1, last - size_separator - 1))};
-      if (fs::weakly_canonical(fs::u8path(name)) != fs::u8path(line.substr(last + 1)))
+      if (fs::weakly_canonical(fs::path(name)) != fs::path(line.substr(last + 1)))
         return false;
       auto found = metadata_cache.find(name);
       if (found == metadata_cache.end()) {
         FileMetadata actual;
-        if (!metadata(fs::u8path(name), actual))
+        if (!metadata(fs::path(name), actual))
           return false;
         found = metadata_cache.emplace(name, actual).first;
       }
@@ -322,7 +322,7 @@ bool cached_dependencies(const std::filesystem::path &source, const std::filesys
     }
     const auto original = fs::weakly_canonical(fs::absolute(source));
     return std::any_of(result.inputs.begin(), result.inputs.end(),
-                       [&](const auto &name) { return fs::weakly_canonical(fs::u8path(name)) == original; });
+                       [&](const auto &name) { return fs::weakly_canonical(fs::path(name)) == original; });
   } catch (const std::exception &) {
     return false;
   }
@@ -396,48 +396,48 @@ int main(int argc, char **argv) {
       throw std::runtime_error("stdin mode requires a nonempty --filename");
     if (scan_only) {
       if (!scan_input.empty()) {
-        std::istringstream lines(defer_tool::read_file(std::filesystem::u8path(scan_input.getValue())));
+        std::istringstream lines(defer_tool::read_file(std::filesystem::path(scan_input.getValue())));
         std::string source;
         while (std::getline(lines, source)) {
           if (!source.empty() && source.back() == '\r')
             source.pop_back();
           if (!source.empty() &&
-              defer_tool::may_contain_transform(defer_tool::read_file(std::filesystem::u8path(source))))
+              defer_tool::may_contain_transform(defer_tool::read_file(std::filesystem::path(source))))
             llvm::outs() << source << '\n';
         }
       }
       for (const auto &source : sources)
-        if (defer_tool::may_contain_transform(defer_tool::read_file(std::filesystem::u8path(source))))
+        if (defer_tool::may_contain_transform(defer_tool::read_file(std::filesystem::path(source))))
           llvm::outs() << source << '\n';
       return 0;
     }
     if (!plan_records.empty()) {
       if (plan_stage.empty() || plan_output.empty() || build_directory.empty())
         throw std::runtime_error("planning requires --plan-stage, --plan-output, and --build-dir");
-      defer_tool::plan_batches(std::filesystem::u8path(plan_records.getValue()),
-                               std::filesystem::u8path(build_directory.getValue()), plan_stage.getValue(),
-                               std::filesystem::u8path(plan_output.getValue()));
+      defer_tool::plan_batches(std::filesystem::path(plan_records.getValue()),
+                               std::filesystem::path(build_directory.getValue()), plan_stage.getValue(),
+                               std::filesystem::path(plan_output.getValue()));
       return 0;
     }
     if (!libclang.empty())
-      defer_tool::verify_libclang(std::filesystem::u8path(libclang.getValue()));
+      defer_tool::verify_libclang(std::filesystem::path(libclang.getValue()));
     defer_tool::DriverOptions options;
     options.preamble = preamble;
     options.enable_defer = enabled_transforms.count("defer") != 0;
     options.enable_closures = enabled_transforms.count("closures") != 0;
     if (!header_overlay.empty())
-      options.header_overlay = std::filesystem::absolute(std::filesystem::u8path(header_overlay.getValue()));
+      options.header_overlay = std::filesystem::absolute(std::filesystem::path(header_overlay.getValue()));
     if (!materialized_headers_root.empty())
-      options.materialized_headers_root = std::filesystem::absolute(std::filesystem::u8path(materialized_headers_root.getValue()));
+      options.materialized_headers_root = std::filesystem::absolute(std::filesystem::path(materialized_headers_root.getValue()));
     if (!materialized_source_root.empty())
-      options.materialized_source_root = std::filesystem::absolute(std::filesystem::u8path(materialized_source_root.getValue()));
+      options.materialized_source_root = std::filesystem::absolute(std::filesystem::path(materialized_source_root.getValue()));
     if (!compilation_database.empty())
       options.compilation_database =
-          std::filesystem::absolute(std::filesystem::u8path(compilation_database.getValue()));
+          std::filesystem::absolute(std::filesystem::path(compilation_database.getValue()));
     if (options.compilation_database.filename() == "compile_commands.json")
       options.compilation_database = options.compilation_database.parent_path();
     const auto depfile_path = depfile.empty() ? std::filesystem::path{}
-                                              : std::filesystem::absolute(std::filesystem::u8path(depfile.getValue()));
+                                              : std::filesystem::absolute(std::filesystem::path(depfile.getValue()));
     defer_tool::ClangIndex index;
     if (stream) {
       options.clang_arguments.assign(sources.begin() + (dash_stream ? 2 : 0), sources.end());
@@ -450,7 +450,7 @@ int main(int argc, char **argv) {
       std::string content{std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>()};
       if (std::cin.bad())
         throw std::runtime_error("failed to read stdin");
-      const auto result = defer_tool::transform_content(index, std::filesystem::u8path(stream_filename.getValue()), {},
+      const auto result = defer_tool::transform_content(index, std::filesystem::path(stream_filename.getValue()), {},
                                                         std::move(content), options);
       std::cout.write(result.contents.data(), static_cast<std::streamsize>(result.contents.size()));
       std::cout.flush();
@@ -471,7 +471,7 @@ int main(int argc, char **argv) {
       if (!line || line > std::numeric_limits<unsigned>::max())
         throw std::runtime_error("--explain line must be a positive integer");
       options.clang_arguments.assign(sources.begin(), sources.end());
-      llvm::outs() << defer_tool::inspect_file(index, std::filesystem::u8path(location.substr(0, separator)),
+      llvm::outs() << defer_tool::inspect_file(index, std::filesystem::path(location.substr(0, separator)),
                                                static_cast<unsigned>(line), options, !show_location.empty());
       return 0;
     }
@@ -483,7 +483,7 @@ int main(int argc, char **argv) {
         throw std::runtime_error("--header-overlay currently accepts one source at a time");
       if (!sources.empty())
         throw std::runtime_error("batch mode does not accept positional source files");
-      const auto contents = defer_tool::read_file(std::filesystem::absolute(std::filesystem::u8path(batch.getValue())));
+      const auto contents = defer_tool::read_file(std::filesystem::absolute(std::filesystem::path(batch.getValue())));
       const auto manifest = defer_tool::Manifest::parse(contents, !options.compilation_database.empty());
       for (const auto &record : manifest.records()) {
         inputs.emplace_back(record.source, record.output);
@@ -497,7 +497,7 @@ int main(int argc, char **argv) {
       options.clang_arguments.assign(sources.begin() + 2, sources.end());
       if (!options.compilation_database.empty() && !options.clang_arguments.empty())
         throw std::runtime_error("explicit arguments cannot be combined with --compilation-database");
-      inputs.emplace_back(std::filesystem::u8path(sources[0]), std::filesystem::u8path(sources[1]));
+      inputs.emplace_back(std::filesystem::path(sources[0]), std::filesystem::path(sources[1]));
       per_file_arguments.push_back(options.clang_arguments);
     }
     if (!options.header_overlay.empty() && (!depfile_path.empty() || dependency_stamps || incremental))
@@ -526,15 +526,15 @@ int main(int argc, char **argv) {
     };
     std::vector<std::filesystem::path> overlay_paths;
     if (header_overlays) {
-      options.protected_paths.push_back(std::filesystem::absolute(std::filesystem::u8path(batch.getValue())));
+      options.protected_paths.push_back(std::filesystem::absolute(std::filesystem::path(batch.getValue())));
       if (!depfile_path.empty())
         options.protected_paths.push_back(depfile_path);
       for (const auto &[source, output] : inputs) {
         options.protected_paths.push_back(source);
         options.protected_paths.push_back(output);
-        options.protected_paths.push_back(std::filesystem::u8path(output.parent_path().u8string() + ".deps"));
-        options.protected_paths.push_back(std::filesystem::u8path(output.parent_path().u8string() + ".cache"));
-        overlay_paths.push_back(std::filesystem::u8path(output.parent_path().u8string() + ".vfs.json"));
+        options.protected_paths.push_back(std::filesystem::path(output.parent_path().u8string() + ".deps"));
+        options.protected_paths.push_back(std::filesystem::path(output.parent_path().u8string() + ".cache"));
+        overlay_paths.push_back(std::filesystem::path(output.parent_path().u8string() + ".vfs.json"));
       }
       for (std::size_t i = 0; i < overlay_paths.size(); ++i) {
         for (const auto &path : options.protected_paths)
@@ -567,7 +567,7 @@ int main(int argc, char **argv) {
     if (dependency_stamps) {
       std::set<std::filesystem::path> stamps;
       for (const auto &[source, output] : inputs) {
-        const auto stamp = std::filesystem::u8path(output.parent_path().u8string() + ".deps");
+        const auto stamp = std::filesystem::path(output.parent_path().u8string() + ".deps");
         if (!stamps.insert(identify(stamp).canonical).second)
           throw std::runtime_error("dependency stamp paths must be unique");
         if (!depfile_path.empty() && aliases(stamp, depfile_path))
@@ -588,9 +588,9 @@ int main(int argc, char **argv) {
       throw std::runtime_error("--shared-cache requires --incremental");
     if (incremental) {
       for (const auto &[source, output] : inputs) {
-        const auto cache = std::filesystem::u8path(output.parent_path().u8string() + ".cache");
+        const auto cache = std::filesystem::path(output.parent_path().u8string() + ".cache");
         for (const auto &[other_source, other_output] : inputs) {
-          const auto other_stamp = std::filesystem::u8path(other_output.parent_path().u8string() + ".deps");
+          const auto other_stamp = std::filesystem::path(other_output.parent_path().u8string() + ".deps");
           for (const auto &protected_path : {other_source, other_output, other_stamp, depfile_path}) {
             if (protected_path.empty())
               continue;
@@ -625,7 +625,7 @@ int main(int argc, char **argv) {
     std::map<std::string, FileMetadata> metadata_cache;
     std::map<std::string, std::string> content_digests;
     const auto build_path = options.compilation_database.generic_u8string();
-    const auto shared_root = std::filesystem::u8path(shared_cache.getValue());
+    const auto shared_root = std::filesystem::path(shared_cache.getValue());
     if (incremental && !base_context.empty())
       for (std::size_t i = 0; i < inputs.size(); ++i) {
         contexts[i] = base_context + (options.preamble ? "preamble=1\n" : "preamble=0\n") +
@@ -725,9 +725,9 @@ int main(int argc, char **argv) {
         if (!cached[i] || restored[i]) {
           defer_tool::write_dependency_stamp(dependencies[i]);
           if (incremental && !contexts[i].empty()) {
-            const auto cache = std::filesystem::u8path(inputs[i].second.parent_path().u8string() + ".cache");
+            const auto cache = std::filesystem::path(inputs[i].second.parent_path().u8string() + ".cache");
             for (const auto &name : dependencies[i].inputs) {
-              const auto input = std::filesystem::u8path(name);
+              const auto input = std::filesystem::path(name);
               if (aliases(cache, input))
                 throw std::runtime_error("incremental cache must not overwrite an included file");
             }
@@ -743,11 +743,11 @@ int main(int argc, char **argv) {
         continue;
       bool safe = true;
       for (const auto &name : dependencies[i].inputs)
-        if (aliases(data, std::filesystem::u8path(name)) || aliases(manifest, std::filesystem::u8path(name)))
+        if (aliases(data, std::filesystem::path(name)) || aliases(manifest, std::filesystem::path(name)))
           safe = false;
       for (const auto &[source, output] : inputs) {
-        const auto stamp = std::filesystem::u8path(output.parent_path().u8string() + ".deps");
-        const auto local_cache = std::filesystem::u8path(output.parent_path().u8string() + ".cache");
+        const auto stamp = std::filesystem::path(output.parent_path().u8string() + ".deps");
+        const auto local_cache = std::filesystem::path(output.parent_path().u8string() + ".cache");
         for (const auto &protected_path : {source, output, stamp, local_cache, depfile_path})
           if (!protected_path.empty() && (aliases(data, protected_path) || aliases(manifest, protected_path)))
             safe = false;
