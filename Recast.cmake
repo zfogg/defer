@@ -359,16 +359,28 @@ function(recast_finish_batches)
                 string(APPEND _content "${_source}\t${_output}\n")
             endforeach()
             file(GENERATE OUTPUT "${_manifest}" CONTENT "${_content}")
+            if(WIN32)
+                set(_recast_cpath_separator ";")
+            else()
+                set(_recast_cpath_separator ":")
+            endif()
+            string(JOIN "${_recast_cpath_separator}" _recast_cpath
+                "${RECAST_SOURCE_ROOT}/deps/recast/include"
+                "${RECAST_SOURCE_ROOT}/include"
+                "${RECAST_SOURCE_ROOT}/lib"
+                "${RECAST_SOURCE_ROOT}/src"
+                "${RECAST_SOURCE_ROOT}/deps")
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "${CMAKE_COMMAND}" -E env
-                    "CPATH=${RECAST_SOURCE_ROOT}/deps/recast/include;${RECAST_SOURCE_ROOT}/include;${RECAST_SOURCE_ROOT}/lib;${RECAST_SOURCE_ROOT}/src;${RECAST_SOURCE_ROOT}/deps"
+                    "CPATH=${_recast_cpath}"
                     "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
                     "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
-                    "$<TARGET_FILE:${_recast_tool_target}>" --batch "${_manifest}"
+                    "$<TARGET_FILE:${_recast_tool_target}>"
                     --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
                     --materialized-source-root "${RECAST_SOURCE_ROOT}"
+                    --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
                 DEPENDS ${_sources} "${_manifest}" ${_recast_tool_target} "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)

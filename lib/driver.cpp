@@ -276,6 +276,11 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   const auto generated_overlay = fs::path(generated.parent_path().u8string() + ".vfs.json");
   std::vector<std::string> result = {"-working-directory", directory, "-iquote", source.parent_path().u8string()};
   const bool emscripten = compiler.find("emcc") != std::string::npos || compiler.find("em++") != std::string::npos;
+  const auto compiler_name = fs::path(compiler).filename().u8string();
+  const bool gcc_driver = compiler_name == "gcc" || compiler_name == "g++" || compiler_name == "cc" ||
+                          compiler_name == "c++" || compiler_name.rfind("musl-gcc", 0) == 0 ||
+                          compiler_name.rfind("musl-g++", 0) == 0 || compiler_name.rfind("gcc-", 0) == 0 ||
+                          compiler_name.rfind("g++-", 0) == 0;
   if (emscripten) {
     const auto defaults = emscripten_driver_defaults(compiler);
     result.insert(result.end(), defaults.begin(), defaults.end());
@@ -301,7 +306,7 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
         value.rfind("-fipa-", 0) == 0 || value.rfind("-fno-ipa-", 0) == 0 || value.rfind("-fgcse", 0) == 0 ||
         value == "-fivopts" || value.rfind("-fsplit-", 0) == 0 || value.rfind("-funswitch-", 0) == 0 ||
         value.rfind("-fpredictive-", 0) == 0 || value == "-fno-plt" ||
-        value == "-nostdinc" || value == "-nostdlibinc" || value == "-nostdinc++" ||
+          gcc_driver && (value == "-nostdinc" || value == "-nostdlibinc" || value == "-nostdinc++") ||
         value == "-fno-semantic-interposition" || value == "-fstack-clash-protection") {
       ++i;
       continue;
@@ -350,11 +355,6 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     result.push_back(value);
     ++i;
   }
-  const auto compiler_name = fs::path(compiler).filename().u8string();
-  const bool gcc_driver = compiler_name == "gcc" || compiler_name == "g++" || compiler_name == "cc" ||
-                          compiler_name == "c++" || compiler_name.rfind("musl-gcc", 0) == 0 ||
-                          compiler_name.rfind("musl-g++", 0) == 0 ||
-                          compiler_name.rfind("gcc-", 0) == 0 || compiler_name.rfind("g++-", 0) == 0;
   const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
   const bool clang_driver = compiler_name == "clang" || compiler_name == "clang++" ||
                             compiler_name.rfind("clang-", 0) == 0 || compiler_name.rfind("clang++-", 0) == 0;
