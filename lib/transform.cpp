@@ -64,7 +64,7 @@ class Transformer {
 public:
   Transformer(CXTranslationUnit unit, std::string path, std::string source, bool allow_other_files = false,
               std::string display_path = {}, bool objc = false)
-      : unit_(unit), path_(std::filesystem::weakly_canonical(std::filesystem::absolute(std::filesystem::u8path(path)))
+      : unit_(unit), path_(std::filesystem::weakly_canonical(std::filesystem::absolute(std::filesystem::path(path)))
                                .generic_u8string()),
         source_(std::move(source)), allow_other_files_(allow_other_files),
         display_path_(display_path.empty() ? path_ : std::move(display_path)), objc_(objc) {
@@ -117,10 +117,10 @@ private:
     if (!file)
       return false;
     const auto file_path = std::filesystem::weakly_canonical(
-        std::filesystem::absolute(std::filesystem::u8path(consume_string(clang_getFileName(file)))));
+        std::filesystem::absolute(std::filesystem::path(consume_string(clang_getFileName(file)))));
     std::error_code error;
-    const bool equivalent = std::filesystem::equivalent(file_path, std::filesystem::u8path(path_), error);
-    return error ? file_path == std::filesystem::u8path(path_) : equivalent;
+    const bool equivalent = std::filesystem::equivalent(file_path, std::filesystem::path(path_), error);
+    return error ? file_path == std::filesystem::path(path_) : equivalent;
   }
   std::string line_directive(unsigned position) const {
     const auto line =
@@ -283,34 +283,13 @@ void Transformer::visit_function(CXCursor cursor) {
   function_prelude_.clear();
   return_type_.clear();
   if (!function_void_ && !objc_) {
-    const auto function_type = "__defer_function_" + std::to_string(start);
     const auto result_type = consume_string(clang_getTypeSpelling(clang_getCursorResultType(cursor)));
-    function_prelude_ = "typedef " + result_type + " (*" + function_type + ")(";
     const int count = clang_Cursor_getNumArguments(cursor);
-    for (int i = 0; i < count; ++i) {
-      auto parameter = clang_Cursor_getArgument(cursor, static_cast<unsigned>(i));
-      auto type = clang_getCanonicalType(clang_getCursorType(parameter));
-      const auto parameter_type = type;
-      while (type.kind == CXType_Pointer || type.kind == CXType_ConstantArray || type.kind == CXType_IncompleteArray) {
-        type = clang_getCanonicalType(type.kind == CXType_Pointer ? clang_getPointeeType(type)
-                                                                  : clang_getArrayElementType(type));
-      }
-      if (type.kind == CXType_VariableArray || type.kind == CXType_DependentSizedArray)
-        fail("variably modified parameter in defer function at byte " + std::to_string(start));
-      const auto type_name = consume_string(clang_getTypeSpelling(parameter_type));
-      function_prelude_ += (i ? ", " : "") + type_name;
-    }
-    // The typedef is emitted so the defer rewriter can preserve the original
-    // function type while materializing cleanup code.  Some functions do not
-    // need the type afterward, so mark it unused instead of making every
-    // transformed translation unit diagnose an intentional helper typedef.
-    function_prelude_ += ") __attribute__((unused));";
     return_type_ = result_type;
     for (int i = 0; i < count; ++i) {
       if (spelling(clang_Cursor_getArgument(cursor, static_cast<unsigned>(i))) == spelling(cursor)) {
         if (result_type.find("unnamed") != std::string::npos || result_type.find("anonymous") != std::string::npos)
           fail("cannot name return type when parameter shadows function");
-        function_prelude_.clear();
         return_type_ = result_type;
         break;
       }
@@ -417,6 +396,10 @@ void Transformer::visit_block(CXCursor cursor, CXCursorKind parent) {
       if (parent == CXCursor_StmtExpr) {
         const auto block_children = children(cursor);
         if (!block_children.empty()) cleanup_position = begin(block_children.back());
+      }
+      if (parent == CXCursor_FunctionDecl && !function_void_ && !objc_) {
+        const auto fallback = "__defer_fallback_" + std::to_string(start);
+        normal_cleanup += " " + return_type_ + " " + fallback + " = {0}; return " + fallback + ";";
       }
       edits_.push_back({cleanup_position, cleanup_position, normal_cleanup});
     }
