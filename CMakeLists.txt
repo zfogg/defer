@@ -1,7 +1,4 @@
 cmake_minimum_required(VERSION 3.25)
-if(RECAST_HOST_CXX)
-  set(CMAKE_CXX_COMPILER "${RECAST_HOST_CXX}")
-endif()
 project(recast VERSION 0.1.0 LANGUAGES CXX)
 
 option(RECAST_STATIC_LIBCLANG "Link libclang and LLVM statically" OFF)
