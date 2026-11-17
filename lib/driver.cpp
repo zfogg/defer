@@ -301,6 +301,7 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
         value.rfind("-fipa-", 0) == 0 || value.rfind("-fno-ipa-", 0) == 0 || value.rfind("-fgcse", 0) == 0 ||
         value == "-fivopts" || value.rfind("-fsplit-", 0) == 0 || value.rfind("-funswitch-", 0) == 0 ||
         value.rfind("-fpredictive-", 0) == 0 || value == "-fno-plt" ||
+        value == "-nostdinc" || value == "-nostdlibinc" || value == "-nostdinc++" ||
         value == "-fno-semantic-interposition" || value == "-fstack-clash-protection") {
       ++i;
       continue;
