@@ -356,13 +356,18 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
                           compiler_name.rfind("musl-g++", 0) == 0 ||
                           compiler_name.rfind("gcc-", 0) == 0 || compiler_name.rfind("g++-", 0) == 0;
   const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
-  if (!gcc_driver && !msvc_driver &&
+  const bool clang_driver = compiler_name == "clang" || compiler_name == "clang++" ||
+                            compiler_name.rfind("clang-", 0) == 0 || compiler_name.rfind("clang++-", 0) == 0;
+  if (clang_driver && !gcc_driver && !msvc_driver &&
       std::none_of(result.begin(), result.end(), [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; })) {
     auto compiler_path = fs::path(compiler);
     if (compiler_path.is_relative() && compiler_path.has_parent_path())
       compiler_path = (working_directory / compiler_path).lexically_normal();
-    result.push_back("-resource-dir");
-    result.push_back(compiler_query(compiler_path.u8string(), "-print-resource-dir"));
+    const auto resource_dir = compiler_query(compiler_path.u8string(), "-print-resource-dir");
+    if (!resource_dir.empty()) {
+      result.push_back("-resource-dir");
+      result.push_back(resource_dir);
+    }
   }
   return result;
 }
