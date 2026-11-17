@@ -347,7 +347,9 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   }
   const auto compiler_name = fs::path(compiler).filename().u8string();
   const bool gcc_driver = compiler_name == "gcc" || compiler_name == "g++" || compiler_name == "cc" ||
-                          compiler_name == "c++";
+                          compiler_name == "c++" || compiler_name.rfind("musl-gcc", 0) == 0 ||
+                          compiler_name.rfind("musl-g++", 0) == 0 ||
+                          compiler_name.rfind("gcc-", 0) == 0 || compiler_name.rfind("g++-", 0) == 0;
   const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
   if (!gcc_driver && !msvc_driver &&
       std::none_of(result.begin(), result.end(), [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; })) {
