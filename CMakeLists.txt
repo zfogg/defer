@@ -47,6 +47,9 @@ set(_core
 add_library(recast-objects OBJECT ${_core})
 target_compile_features(recast-objects PUBLIC cxx_std_23)
 target_include_directories(recast-objects PUBLIC include)
+if(RECAST_HOST_CXX_INCLUDE_DIRS)
+  target_include_directories(recast-objects BEFORE PRIVATE ${RECAST_HOST_CXX_INCLUDE_DIRS})
+endif()
 
 if(MSVC)
   target_compile_options(recast-objects PRIVATE /Zc:char8_t-)
@@ -75,6 +78,9 @@ add_executable(recast
 set_target_properties(recast PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_features(recast PRIVATE cxx_std_23)
 target_include_directories(recast PRIVATE include "${CMAKE_CURRENT_BINARY_DIR}/generated")
+if(RECAST_HOST_CXX_INCLUDE_DIRS)
+  target_include_directories(recast BEFORE PRIVATE ${RECAST_HOST_CXX_INCLUDE_DIRS})
+endif()
 
 if(MSVC)
   target_compile_options(recast PRIVATE /Zc:char8_t-)
