@@ -298,7 +298,10 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     // libclang, where forwarding them produces warnings for every source.
     if (value == "-Wlogical-op" || value == "-Wduplicated-cond" || value == "-Wduplicated-branches" ||
         value == "-Wtrampolines" || value.rfind("-ftree-", 0) == 0 || value.rfind("-fno-tree-", 0) == 0 ||
-        value.rfind("-fipa-", 0) == 0 || value.rfind("-fno-ipa-", 0) == 0) {
+        value.rfind("-fipa-", 0) == 0 || value.rfind("-fno-ipa-", 0) == 0 || value.rfind("-fgcse", 0) == 0 ||
+        value == "-fivopts" || value.rfind("-fsplit-", 0) == 0 || value.rfind("-funswitch-", 0) == 0 ||
+        value.rfind("-fpredictive-", 0) == 0 || value == "-fno-plt" ||
+        value == "-fno-semantic-interposition" || value == "-fstack-clash-protection") {
       ++i;
       continue;
     }
