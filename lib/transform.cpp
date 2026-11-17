@@ -300,7 +300,11 @@ void Transformer::visit_function(CXCursor cursor) {
       const auto type_name = consume_string(clang_getTypeSpelling(parameter_type));
       function_prelude_ += (i ? ", " : "") + type_name;
     }
-    function_prelude_ += ");";
+    // The typedef is emitted so the defer rewriter can preserve the original
+    // function type while materializing cleanup code.  Some functions do not
+    // need the type afterward, so mark it unused instead of making every
+    // transformed translation unit diagnose an intentional helper typedef.
+    function_prelude_ += ") __attribute__((unused));";
     return_type_ = result_type;
     for (int i = 0; i < count; ++i) {
       if (spelling(clang_Cursor_getArgument(cursor, static_cast<unsigned>(i))) == spelling(cursor)) {

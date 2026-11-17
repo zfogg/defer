@@ -276,6 +276,9 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   const auto generated_overlay = fs::u8path(generated.parent_path().u8string() + ".vfs.json");
   std::vector<std::string> result = {"-working-directory", directory, "-iquote", source.parent_path().u8string()};
   const bool emscripten = compiler.find("emcc") != std::string::npos || compiler.find("em++") != std::string::npos;
+  const auto compiler_name = fs::path(compiler).filename().u8string();
+  const bool gcc_driver = compiler_name == "gcc" || compiler_name == "g++" || compiler_name == "cc" ||
+                          compiler_name == "c++";
   if (emscripten) {
     const auto defaults = emscripten_driver_defaults(compiler);
     result.insert(result.end(), defaults.begin(), defaults.end());
@@ -318,6 +321,13 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
       ++i;
       continue;
     }
+    // These options intentionally exclude the host standard headers. Preserve
+    // them for Clang/libclang; only drop them when they came from a GCC-style
+    // driver and would otherwise be rejected by the native parser.
+    if (gcc_driver && (value == "-nostdinc" || value == "-nostdlibinc" || value == "-nostdinc++")) {
+      ++i;
+      continue;
+    }
     if ((value == "-I" || value == "-isystem" || value == "-iquote" || value == "-idirafter" || value == "-include" ||
          value == "-imacros" || value == "-isysroot" || value == "--sysroot" || value == "-target" ||
          value == "--target" || value == "-resource-dir" || value == "-Xclang" || value == "-D" || value == "-U" ||
@@ -338,9 +348,6 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     result.push_back(value);
     ++i;
   }
-  const auto compiler_name = fs::path(compiler).filename().u8string();
-  const bool gcc_driver = compiler_name == "gcc" || compiler_name == "g++" || compiler_name == "cc" ||
-                          compiler_name == "c++";
   const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
   if (!gcc_driver && !msvc_driver &&
       std::none_of(result.begin(), result.end(), [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; })) {
