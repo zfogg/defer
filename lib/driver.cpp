@@ -281,6 +281,13 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
                           compiler_name == "c++" || compiler_name.rfind("musl-gcc", 0) == 0 ||
                           compiler_name.rfind("musl-g++", 0) == 0 || compiler_name.rfind("gcc-", 0) == 0 ||
                           compiler_name.rfind("g++-", 0) == 0;
+  const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
+  if (msvc_driver) {
+    result.push_back("-target");
+    result.push_back("x86_64-pc-windows-msvc");
+    result.push_back("-fms-compatibility");
+    result.push_back("-fms-compatibility-version=19.44");
+  }
   if (emscripten) {
     const auto defaults = emscripten_driver_defaults(compiler);
     result.insert(result.end(), defaults.begin(), defaults.end());
@@ -367,7 +374,6 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     result.push_back(value);
     ++i;
   }
-  const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
   const bool clang_driver = compiler_name == "clang" || compiler_name == "clang++" ||
                             compiler_name.rfind("clang-", 0) == 0 || compiler_name.rfind("clang++-", 0) == 0;
   if (clang_driver && !gcc_driver && !msvc_driver &&
@@ -393,13 +399,6 @@ std::vector<std::string> compilation_arguments(const fs::path &database, const f
 }
 
 void add_default_resource_dir(std::vector<std::string> &arguments) {
-#ifdef _WIN32
-  if (std::none_of(arguments.begin(), arguments.end(),
-                   [](const auto &arg) { return arg == "-fms-compatibility"; })) {
-    arguments.push_back("-fms-compatibility");
-    arguments.push_back("-fms-compatibility-version=19.44");
-  }
-#endif
   if (std::none_of(arguments.begin(), arguments.end(),
                    [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; }) &&
       llvm::sys::findProgramByName("clang")) {
