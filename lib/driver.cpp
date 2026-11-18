@@ -255,10 +255,13 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   {
     std::lock_guard<std::mutex> database_lock(db->mutex);
     selected = exact_command_count(database, db->value, generated) ? generated : source;
-    if (exact_command_count(database, db->value, selected) != 1)
-      throw std::runtime_error("expected one compile command for " + selected.u8string());
+    if (exact_command_count(database, db->value, selected) == 0)
+      throw std::runtime_error("no compile command for " + selected.u8string());
     CXCompileCommands commands = clang_CompilationDatabase_getCompileCommands(db->value, selected.u8string().c_str());
-    if (!commands || clang_CompileCommands_getSize(commands) != 1) {
+    // Multi-config generators emit one command per configuration. Recast only
+    // needs a valid command shape for parsing, so use the first configuration
+    // rather than rejecting an otherwise valid compilation database.
+    if (!commands || clang_CompileCommands_getSize(commands) == 0) {
       if (commands)
         clang_CompileCommands_dispose(commands);
       throw std::runtime_error("expected one compile command for " + selected.u8string());
