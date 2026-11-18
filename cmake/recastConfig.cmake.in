@@ -3,26 +3,29 @@
 set(_recast_include_dir "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
 set(_recast_lib_dir "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@")
 
-if(NOT TARGET recast::recast_static)
-  add_library(recast::recast_static STATIC IMPORTED)
-  set_target_properties(recast::recast_static PROPERTIES
-    IMPORTED_LOCATION "${_recast_lib_dir}/@CMAKE_STATIC_LIBRARY_PREFIX@recast-static@CMAKE_STATIC_LIBRARY_SUFFIX@"
-    INTERFACE_INCLUDE_DIRECTORIES "${_recast_include_dir}")
+if(NOT DEFINED RECAST_LINKAGE OR RECAST_LINKAGE STREQUAL "")
+  set(RECAST_LINKAGE SHARED)
+endif()
+string(TOUPPER "${RECAST_LINKAGE}" _recast_linkage)
+if(NOT _recast_linkage MATCHES "^(STATIC|SHARED)$")
+  message(FATAL_ERROR "RECAST_LINKAGE must be STATIC or SHARED")
 endif()
 
-if(NOT TARGET recast::recast_shared)
-  add_library(recast::recast_shared SHARED IMPORTED)
-  set_target_properties(recast::recast_shared PROPERTIES
+if(_recast_linkage STREQUAL "STATIC")
+  add_library(recast::recast STATIC IMPORTED)
+  set_target_properties(recast::recast PROPERTIES
+    IMPORTED_LOCATION "${_recast_lib_dir}/@CMAKE_STATIC_LIBRARY_PREFIX@recast-static@CMAKE_STATIC_LIBRARY_SUFFIX@"
+    INTERFACE_INCLUDE_DIRECTORIES "${_recast_include_dir}")
+else()
+  add_library(recast::recast SHARED IMPORTED)
+  set_target_properties(recast::recast PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${_recast_include_dir}")
   if(WIN32)
-    set_target_properties(recast::recast_shared PROPERTIES
+    set_target_properties(recast::recast PROPERTIES
       IMPORTED_IMPLIB "${_recast_lib_dir}/recast-shared.lib"
       IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/recast-shared.dll")
   else()
-    set_target_properties(recast::recast_shared PROPERTIES
+    set_target_properties(recast::recast PROPERTIES
       IMPORTED_LOCATION "${_recast_lib_dir}/@CMAKE_SHARED_LIBRARY_PREFIX@recast-shared@CMAKE_SHARED_LIBRARY_SUFFIX@")
   endif()
 endif()
-
-add_library(recast::static ALIAS recast::recast_static)
-add_library(recast::shared ALIAS recast::recast_shared)
