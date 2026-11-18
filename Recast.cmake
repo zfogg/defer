@@ -377,12 +377,12 @@ function(recast_finish_batches)
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
                     "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
-                    "$<TARGET_FILE:${_recast_tool_target}>"
+                    "${_recast_tool_command}"
                     --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
                     --materialized-source-root "${RECAST_SOURCE_ROOT}"
                     --batch "${_manifest}"
                     --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
-                DEPENDS ${_sources} "${_manifest}" ${_recast_tool_target} "${CMAKE_BINARY_DIR}/compile_commands.json"
+                DEPENDS ${_sources} "${_manifest}" ${_recast_tool_dependency} "${CMAKE_BINARY_DIR}/compile_commands.json"
                 DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
             add_custom_target("recast-${_id}" DEPENDS ${_outputs} ${_stamps} ${_overlays})
             add_dependencies(recast-materialized-headers "recast-${_id}")
@@ -601,10 +601,18 @@ function(recast_targets)
     message(FATAL_ERROR "recast_targets requires single-config Ninja or Unix Makefiles")
   endif()
   if(RECAST_BACKEND STREQUAL "NATIVE")
-    if(NOT TARGET recast)
-      message(FATAL_ERROR "The native Recast target must be added before recast_targets()")
+    if(RECAST_NATIVE_BINARY)
+      if(NOT EXISTS "${RECAST_NATIVE_BINARY}")
+        message(FATAL_ERROR "RECAST_NATIVE_BINARY does not exist: ${RECAST_NATIVE_BINARY}")
+      endif()
+      set(_recast_tool_command "${RECAST_NATIVE_BINARY}")
+      set(_recast_tool_dependency "${RECAST_NATIVE_BINARY}")
+    elseif(TARGET recast)
+      set(_recast_tool_command "$<TARGET_FILE:recast>")
+      set(_recast_tool_dependency recast)
+    else()
+      message(FATAL_ERROR "Add the native Recast target or set RECAST_NATIVE_BINARY before recast_targets()")
     endif()
-    set(_recast_tool_target recast)
   elseif(RECAST_BACKEND STREQUAL "PYTHON")
     if(NOT EXISTS "${RECAST_TOOL_ROOT}/python/defer.py")
       message(FATAL_ERROR "Set RECAST_TOOL_ROOT to a defer checkout for the Python backend")
