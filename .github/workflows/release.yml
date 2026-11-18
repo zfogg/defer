@@ -10,6 +10,11 @@ on:
     tags: ['v*']
 permissions:
   contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   native:
     strategy:
@@ -32,19 +37,23 @@ jobs:
           python-version: '3.12'
       - name: Install Linux build tools
         if: matrix.os == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y clang lld llvm ninja-build cmake binutils
+        run: bash scripts/install-deps.sh linux
       - name: Install macOS build tools
         if: matrix.os == 'macos'
-        run: brew install ninja
+        run: bash scripts/install-deps.sh macos
       - name: Set up Windows compiler environment
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch == 'arm64' && 'arm64' || 'x64' }}
+      - name: Validate Windows LLVM tools
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: ./scripts/install-deps.ps1
       - name: Set Windows ARM compiler target
         if: matrix.os == 'windows' && matrix.arch == 'arm64'
         shell: pwsh
-        run: '"DEFER_COMPILER_TARGET=aarch64-pc-windows-msvc" >> $env:GITHUB_ENV'
+        run: '"RECAST_COMPILER_TARGET=aarch64-pc-windows-msvc" >> $env:GITHUB_ENV'
       - name: Build, test, and package
         shell: bash
         run: python scripts/release.py --name "${{ matrix.name }}" --work "$RUNNER_TEMP/recast-release" --output "$GITHUB_WORKSPACE/dist"
