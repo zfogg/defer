@@ -380,6 +380,9 @@ void Transformer::visit_block(CXCursor cursor, CXCursorKind parent) {
   if (!actions.empty() && has_external_case(cursor))
     fail_at(start, "switch dispatch can enter a defer scope; put each case in its own block");
   if (!actions.empty()) {
+    const auto block_children = children(cursor);
+    const bool ends_with_return =
+        !block_children.empty() && clang_getCursorKind(block_children.back()) == CXCursor_ReturnStmt;
     std::string declarations;
     for (const auto &action : actions)
       declarations += "int " + action.flag + " = 0; ";
@@ -393,15 +396,17 @@ void Transformer::visit_block(CXCursor cursor, CXCursorKind parent) {
       edits_.push_back({finish - 1, finish - 1, finalizers});
     } else {
       unsigned cleanup_position = finish - 1;
-      if (parent == CXCursor_StmtExpr) {
-        const auto block_children = children(cursor);
-        if (!block_children.empty()) cleanup_position = begin(block_children.back());
+      if (parent == CXCursor_StmtExpr && !block_children.empty())
+        cleanup_position = begin(block_children.back());
+      // A final return already receives cleanup in visit_return. Appending a
+      // second normal-exit cleanup after it only creates unreachable C code.
+      if (!(parent == CXCursor_FunctionDecl && ends_with_return)) {
+        if (parent == CXCursor_FunctionDecl && !function_void_ && !objc_) {
+          const auto fallback = "__defer_fallback_" + std::to_string(start);
+          normal_cleanup += " " + return_type_ + " " + fallback + " = {0}; return " + fallback + ";";
+        }
+        edits_.push_back({cleanup_position, cleanup_position, normal_cleanup});
       }
-      if (parent == CXCursor_FunctionDecl && !function_void_ && !objc_) {
-        const auto fallback = "__defer_fallback_" + std::to_string(start);
-        normal_cleanup += " " + return_type_ + " " + fallback + " = {0}; return " + fallback + ";";
-      }
-      edits_.push_back({cleanup_position, cleanup_position, normal_cleanup});
     }
   }
   scopes_.pop_back();
