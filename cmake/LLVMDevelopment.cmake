@@ -63,9 +63,11 @@ function(recast_find_llvm_development)
                 endif()
                 set(_llvm_version "23.1.5")
                 set(_llvm_archive_name "clang+llvm-${_llvm_version}-${_llvm_archive_arch}-pc-windows-msvc.tar.xz")
-                set(_llvm_archive "${CMAKE_BINARY_DIR}/_deps/${_llvm_archive_name}")
-                set(_llvm_download_root "${CMAKE_BINARY_DIR}/_deps/llvm-dev-${_llvm_version}${_suffix}")
-                set(_llvm_extracted_root "${CMAKE_BINARY_DIR}/_deps/clang+llvm-${_llvm_version}-${_llvm_archive_arch}-pc-windows-msvc")
+                set(_llvm_cache_root "${ASCIICHAT_DEPS_CACHE_DIR}/llvm-dev")
+                set(_llvm_archive "${_llvm_cache_root}/${_llvm_archive_name}")
+                set(_llvm_download_root "${_llvm_cache_root}/llvm-dev-${_llvm_version}${_suffix}")
+                set(_llvm_extracted_root "${_llvm_cache_root}/clang+llvm-${_llvm_version}-${_llvm_archive_arch}-pc-windows-msvc")
+                file(MAKE_DIRECTORY "${_llvm_cache_root}")
                 if(NOT EXISTS "${_llvm_extracted_root}/include/llvm/Support/CommandLine.h")
                     message(STATUS "Recast LLVM development archive not found; downloading ${_llvm_archive_name}")
                     file(DOWNLOAD
@@ -82,7 +84,7 @@ function(recast_find_llvm_development)
                     endif()
                     execute_process(
                         COMMAND "${CMAKE_COMMAND}" -E tar xf "${_llvm_archive}"
-                        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/_deps"
+                        WORKING_DIRECTORY "${_llvm_cache_root}"
                         RESULT_VARIABLE _llvm_extract_result)
                     if(NOT _llvm_extract_result EQUAL 0)
                         message(FATAL_ERROR "Could not extract the Recast LLVM development archive; remove ${_llvm_archive} and retry")
