@@ -214,6 +214,21 @@ def main() -> None:
     shutil.copyfile(source / "llvm/LICENSE.TXT", stage / "LICENSE-LLVM.txt")
     shutil.copyfile(ROOT / "README.md", stage / "README.md")
     shutil.copytree(source / "clang/include/clang-c", stage / "include/clang-c", dirs_exist_ok=True)
+    pkgconfig = stage / "lib" / "pkgconfig"
+    pkgconfig.mkdir(parents=True, exist_ok=True)
+    for linkage, library in (("static", "recast-static"), ("shared", "recast-shared")):
+        (pkgconfig / f"recast-{linkage}.pc").write_text(
+            f"""prefix=${{pcfiledir}}/../..\n
+            f"exec_prefix=${{prefix}}\n"
+            f"libdir=${{prefix}}/lib\n"
+            f"includedir=${{prefix}}/include\n\n"
+            f"Name: recast-{linkage}\n"
+            f"Description: Recast source transformation library ({linkage})\n"
+            f"Version: {LLVM_VERSION}\n"
+            f"Libs: -L${{libdir}} -l{library}\n"
+            f"Cflags: -I${{includedir}}\n""",
+            encoding="utf-8",
+        )
     combine_archives(stage, llvm)
     verify_sdk(work, stage, cxx)
     binary = stage / "bin" / ("recast.exe" if sys.platform == "win32" else "recast")
