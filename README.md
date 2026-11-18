@@ -1,5 +1,7 @@
 # Recast
 
+[Releases](https://github.com/zfogg/recast/releases)
+
 [GitHub](https://github.com/zfogg/recast) · [Documentation](https://zfogg.github.io/recast/) · [C++ and C API](https://zfogg.github.io/recast/cpp/) · [Python API](https://zfogg.github.io/recast/python/)
 
 `Recast` is a source-transformation pipeline. Its defer pass provides block-scoped cleanup for C and Objective-C, and a native C++ scope guard; the closure pass is being introduced by the Recast migration. The `recast` source transformer uses LLVM 19 or newer and libclang. Existing defer spellings remain unchanged. Unsupported cases produce an error.
