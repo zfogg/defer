@@ -393,6 +393,13 @@ std::vector<std::string> compilation_arguments(const fs::path &database, const f
 }
 
 void add_default_resource_dir(std::vector<std::string> &arguments) {
+#ifdef _WIN32
+  if (std::none_of(arguments.begin(), arguments.end(),
+                   [](const auto &arg) { return arg == "-fms-compatibility"; })) {
+    arguments.push_back("-fms-compatibility");
+    arguments.push_back("-fms-compatibility-version=19.44");
+  }
+#endif
   if (std::none_of(arguments.begin(), arguments.end(),
                    [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; }) &&
       llvm::sys::findProgramByName("clang")) {
