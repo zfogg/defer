@@ -1,4 +1,5 @@
 include_guard(GLOBAL)
+
 if(NOT RECAST_TOOL_ROOT)
   get_filename_component(RECAST_TOOL_ROOT "${CMAKE_CURRENT_LIST_DIR}" DIRECTORY)
 endif()
@@ -365,7 +366,7 @@ function(recast_finish_batches)
                 set(_recast_cpath_separator ":")
             endif()
             string(JOIN "${_recast_cpath_separator}" _recast_cpath
-                "${CMAKE_CURRENT_LIST_DIR}/include"
+                "${RECAST_TOOL_ROOT}/include"
                 "${RECAST_SOURCE_ROOT}/include"
                 "${RECAST_SOURCE_ROOT}/include/ascii-chat"
                 "${RECAST_SOURCE_ROOT}/lib"

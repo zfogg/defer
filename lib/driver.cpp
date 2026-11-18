@@ -304,6 +304,11 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     result.push_back("-fms-compatibility");
     result.push_back("-fms-compatibility-version=19.44");
     result.push_back("-fms-extensions");
+    // Windows headers may reach winsock.h through windows.h before a project
+    // header includes winsock2.h. Keep the SDK's legacy socket declarations
+    // out of the libclang parse; the native MSVC compile already applies the
+    // project's normal header ordering.
+    result.push_back("-D_WINSOCKAPI_=1");
   }
   if (emscripten) {
     const auto defaults = emscripten_driver_defaults(compiler);
