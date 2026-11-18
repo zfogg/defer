@@ -212,7 +212,7 @@ def main() -> None:
     run("cmake", "--install", build, "--prefix", stage)
     shutil.copyfile(ROOT / "LICENSE", stage / "LICENSE")
     shutil.copyfile(source / "llvm/LICENSE.TXT", stage / "LICENSE-LLVM.txt")
-    shutil.copyfile(ROOT / "README.md", stage / "README.md")
+    shutil.copyfile(ROOT / "RELEASE.md", stage / "README.md")
     shutil.copytree(source / "clang/include/clang-c", stage / "include/clang-c", dirs_exist_ok=True)
     pkgconfig = stage / "lib" / "pkgconfig"
     pkgconfig.mkdir(parents=True, exist_ok=True)
