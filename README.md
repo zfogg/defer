@@ -30,6 +30,21 @@ cmake --install build --prefix "C:/path/to/recast-install"
 
 The Scoop LLVM package provides the compiler; use the separate LLVM development archive for the headers and libraries required by this build. Match their LLVM versions and target architecture.
 
+Installed SDK consumers can use the relocatable CMake package:
+
+```cmake
+set(RECAST_LINKAGE STATIC) # or SHARED
+find_package(recast CONFIG REQUIRED)
+target_link_libraries(my_tool PRIVATE recast::recast)
+```
+
+The generated pkg-config metadata is installed under `lib/pkgconfig`:
+
+```sh
+pkg-config --cflags --libs recast
+pkg-config --static --cflags --libs recast
+```
+
 `make build`, `make install`, `make format`, and `make format-check` provide shortcuts where Make is available. The install includes the CLI, SDK libraries and headers, and the CMake module. A normal development build uses a shared libclang; release builds link it statically. Build the two-language documentation separately with `cmake -S docs -B build/docs` followed by `cmake --build build/docs --target docs`.
 
 Build configuration options can be passed to CMake as `-DNAME=VALUE`:
