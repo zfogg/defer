@@ -255,15 +255,31 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
   {
     std::lock_guard<std::mutex> database_lock(db->mutex);
     selected = exact_command_count(database, db->value, generated) ? generated : source;
-    if (exact_command_count(database, db->value, selected) != 1)
-      throw std::runtime_error("expected one compile command for " + selected.u8string());
     CXCompileCommands commands = clang_CompilationDatabase_getCompileCommands(db->value, selected.u8string().c_str());
-    if (!commands || clang_CompileCommands_getSize(commands) != 1) {
+    unsigned command_index = 0;
+    // Multi-config generators emit one command per configuration. Recast only
+    // needs a valid command shape for parsing, so use the first configuration
+    // rather than rejecting an otherwise valid compilation database.
+    if (!commands || clang_CompileCommands_getSize(commands) == 0) {
       if (commands)
         clang_CompileCommands_dispose(commands);
-      throw std::runtime_error("expected one compile command for " + selected.u8string());
+      commands = clang_CompilationDatabase_getAllCompileCommands(db->value);
+      const auto wanted_name = selected.filename().u8string();
+      command_index = 0;
+      if (commands) {
+        for (unsigned i = 0; i < clang_CompileCommands_getSize(commands); ++i) {
+          const auto candidate = clang_CompileCommands_getCommand(commands, i);
+          const auto filename = fs::path(consume_string(clang_CompileCommand_getFilename(candidate)));
+          if (filename.filename().u8string() == wanted_name) {
+            command_index = i;
+            break;
+          }
+        }
+      }
+      if (!commands || clang_CompileCommands_getSize(commands) == 0)
+        throw std::runtime_error("no compile command for " + selected.u8string());
     }
-    const auto command = clang_CompileCommands_getCommand(commands, 0);
+    const auto command = clang_CompileCommands_getCommand(commands, command_index);
     directory = consume_string(clang_CompileCommand_getDirectory(command));
     for (unsigned i = 0; i < clang_CompileCommand_getNumArgs(command); ++i)
       args.push_back(consume_string(clang_CompileCommand_getArg(command, i)));
@@ -281,6 +297,14 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
                           compiler_name == "c++" || compiler_name.rfind("musl-gcc", 0) == 0 ||
                           compiler_name.rfind("musl-g++", 0) == 0 || compiler_name.rfind("gcc-", 0) == 0 ||
                           compiler_name.rfind("g++-", 0) == 0;
+  const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
+  if (msvc_driver) {
+    result.push_back("-target");
+    result.push_back("x86_64-pc-windows-msvc");
+    result.push_back("-fms-compatibility");
+    result.push_back("-fms-compatibility-version=19.44");
+    result.push_back("-fms-extensions");
+  }
   if (emscripten) {
     const auto defaults = emscripten_driver_defaults(compiler);
     result.insert(result.end(), defaults.begin(), defaults.end());
@@ -340,6 +364,18 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
          value == "--target" || value == "-resource-dir" || value == "-Xclang" || value == "-D" || value == "-U" ||
          value == "-x") &&
         i + 1 < args.size()) {
+      // GCC's builtin headers are implementation details of the compiler in
+      // the compile database. They are not compatible with libclang's parser
+      // (notably GCC's stdatomic.h), so let the host Clang resource directory
+      // provide its own builtin headers while retaining the target sysroot.
+      if (value == "-isystem" &&
+          (args[i + 1].find("/lib/gcc/") != std::string::npos ||
+           args[i + 1].find("\\lib\\gcc\\") != std::string::npos ||
+           args[i + 1].find("/include-fixed") != std::string::npos ||
+           args[i + 1].find("\\include-fixed") != std::string::npos)) {
+        i += 2;
+        continue;
+      }
       result.push_back(value);
       result.push_back(args[i + 1]);
       i += 2;
@@ -355,7 +391,6 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     result.push_back(value);
     ++i;
   }
-  const bool msvc_driver = compiler_name == "cl" || compiler_name == "cl.exe";
   const bool clang_driver = compiler_name == "clang" || compiler_name == "clang++" ||
                             compiler_name.rfind("clang-", 0) == 0 || compiler_name.rfind("clang++-", 0) == 0;
   if (clang_driver && !gcc_driver && !msvc_driver &&
@@ -381,6 +416,11 @@ std::vector<std::string> compilation_arguments(const fs::path &database, const f
 }
 
 void add_default_resource_dir(std::vector<std::string> &arguments) {
+  const bool msvc_target = std::any_of(arguments.begin(), arguments.end(), [](const auto &argument) {
+    return argument == "-target" || argument == "--target" || argument == "x86_64-pc-windows-msvc";
+  });
+  if (msvc_target)
+    return;
   if (std::none_of(arguments.begin(), arguments.end(),
                    [](const auto &arg) { return arg.rfind("-resource-dir", 0) == 0; }) &&
       llvm::sys::findProgramByName("clang")) {

@@ -367,12 +367,21 @@ function(recast_finish_batches)
             string(JOIN "${_recast_cpath_separator}" _recast_cpath
                 "${CMAKE_CURRENT_LIST_DIR}/include"
                 "${RECAST_SOURCE_ROOT}/include"
+                "${RECAST_SOURCE_ROOT}/include/ascii-chat"
                 "${RECAST_SOURCE_ROOT}/lib"
                 "${RECAST_SOURCE_ROOT}/src"
-                "${RECAST_SOURCE_ROOT}/deps")
+                "${RECAST_SOURCE_ROOT}/deps"
+                ${RECAST_EXTRA_INCLUDE_DIRS})
+            if(WIN32)
+                # CMake lists use semicolons, but Windows CPATH must reach
+                # cmake -E env as one command argument.
+                set(_recast_cpath_arg "$<JOIN:${_recast_cpath},$<SEMICOLON>>")
+            else()
+                set(_recast_cpath_arg "${_recast_cpath}")
+            endif()
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "${CMAKE_COMMAND}" -E env
-                    "CPATH=${_recast_cpath}"
+                    "CPATH=${_recast_cpath_arg}"
                     "C_INCLUDE_PATH=" "CPLUS_INCLUDE_PATH="
                     "OBJC_INCLUDE_PATH=" "OBJCPLUS_INCLUDE_PATH="
                     "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
@@ -598,9 +607,6 @@ function(recast_targets)
   endif()
   if(NOT CMAKE_EXPORT_COMPILE_COMMANDS)
     message(FATAL_ERROR "recast_targets requires CMAKE_EXPORT_COMPILE_COMMANDS=ON")
-  endif()
-  if(NOT CMAKE_GENERATOR MATCHES "^(Ninja|Unix Makefiles)$")
-    message(FATAL_ERROR "recast_targets requires single-config Ninja or Unix Makefiles")
   endif()
   if(RECAST_BACKEND STREQUAL "NATIVE")
     if(RECAST_NATIVE_BINARY)
