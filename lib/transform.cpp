@@ -400,7 +400,7 @@ void Transformer::visit_block(CXCursor cursor, CXCursorKind parent) {
         cleanup_position = begin(block_children.back());
       // A final return already receives cleanup in visit_return. Appending a
       // second normal-exit cleanup after it only creates unreachable C code.
-      if (!(parent == CXCursor_FunctionDecl && ends_with_return)) {
+      if (!ends_with_return) {
         if (parent == CXCursor_FunctionDecl && !function_void_ && !objc_) {
           const auto fallback = "__defer_fallback_" + std::to_string(start);
           normal_cleanup += " " + return_type_ + " " + fallback + " = {0}; return " + fallback + ";";
