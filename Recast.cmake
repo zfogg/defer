@@ -365,7 +365,7 @@ function(recast_finish_batches)
                 set(_recast_cpath_separator ":")
             endif()
             string(JOIN "${_recast_cpath_separator}" _recast_cpath
-                "${RECAST_SOURCE_ROOT}/deps/recast/include"
+                "${CMAKE_CURRENT_LIST_DIR}/include"
                 "${RECAST_SOURCE_ROOT}/include"
                 "${RECAST_SOURCE_ROOT}/lib"
                 "${RECAST_SOURCE_ROOT}/src"
@@ -373,6 +373,8 @@ function(recast_finish_batches)
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "${CMAKE_COMMAND}" -E env
                     "CPATH=${_recast_cpath}"
+                    "C_INCLUDE_PATH=" "CPLUS_INCLUDE_PATH="
+                    "OBJC_INCLUDE_PATH=" "OBJCPLUS_INCLUDE_PATH="
                     "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
