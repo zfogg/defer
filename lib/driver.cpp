@@ -258,15 +258,30 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     if (exact_command_count(database, db->value, selected) == 0)
       throw std::runtime_error("no compile command for " + selected.u8string());
     CXCompileCommands commands = clang_CompilationDatabase_getCompileCommands(db->value, selected.u8string().c_str());
+    unsigned command_index = 0;
     // Multi-config generators emit one command per configuration. Recast only
     // needs a valid command shape for parsing, so use the first configuration
     // rather than rejecting an otherwise valid compilation database.
     if (!commands || clang_CompileCommands_getSize(commands) == 0) {
       if (commands)
         clang_CompileCommands_dispose(commands);
-      throw std::runtime_error("expected one compile command for " + selected.u8string());
+      commands = clang_CompilationDatabase_getAllCompileCommands(db->value);
+      const auto wanted_name = selected.filename().u8string();
+      command_index = 0;
+      if (commands) {
+        for (unsigned i = 0; i < clang_CompileCommands_getSize(commands); ++i) {
+          const auto candidate = clang_CompileCommands_getCommand(commands, i);
+          const auto filename = fs::path(consume_string(clang_CompileCommand_getFilename(candidate)));
+          if (filename.filename().u8string() == wanted_name) {
+            command_index = i;
+            break;
+          }
+        }
+      }
+      if (!commands || clang_CompileCommands_getSize(commands) == 0)
+        throw std::runtime_error("no compile command for " + selected.u8string());
     }
-    const auto command = clang_CompileCommands_getCommand(commands, 0);
+    const auto command = clang_CompileCommands_getCommand(commands, command_index);
     directory = consume_string(clang_CompileCommand_getDirectory(command));
     for (unsigned i = 0; i < clang_CompileCommand_getNumArgs(command); ++i)
       args.push_back(consume_string(clang_CompileCommand_getArg(command, i)));
