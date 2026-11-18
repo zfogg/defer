@@ -367,6 +367,7 @@ function(recast_finish_batches)
             string(JOIN "${_recast_cpath_separator}" _recast_cpath
                 "${RECAST_SOURCE_ROOT}/deps/recast/include"
                 "${RECAST_SOURCE_ROOT}/include"
+                "${RECAST_SOURCE_ROOT}/include/ascii-chat"
                 "${RECAST_SOURCE_ROOT}/lib"
                 "${RECAST_SOURCE_ROOT}/src"
                 "${RECAST_SOURCE_ROOT}/deps"
