@@ -369,7 +369,8 @@ function(recast_finish_batches)
                 "${RECAST_SOURCE_ROOT}/include"
                 "${RECAST_SOURCE_ROOT}/lib"
                 "${RECAST_SOURCE_ROOT}/src"
-                "${RECAST_SOURCE_ROOT}/deps")
+                "${RECAST_SOURCE_ROOT}/deps"
+                ${RECAST_EXTRA_INCLUDE_DIRS})
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "${CMAKE_COMMAND}" -E env
                     "CPATH=${_recast_cpath}"
