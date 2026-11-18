@@ -10,6 +10,32 @@ set(RECAST_HEADER_OVERLAYS "AUTO" CACHE STRING "Header overlays: AUTO, ON, or OF
 set(RECAST_SHARED_CACHE "" CACHE PATH "Shared transformation cache")
 set(RECAST_WRAPPER_HEADER_DIRS "" CACHE STRING "Additional wrapper header directories")
 set(RECAST_TRANSFORMS "all" CACHE STRING "Comma-separated Recast transforms used by CMake (all, defer, closures)")
+if(USE_MUSL AND NOT RECAST_NATIVE_BINARY)
+  find_program(_recast_host_cxx NAMES clang++ g++ REQUIRED)
+  set(_recast_host_build "${CMAKE_BINARY_DIR}/recast-host")
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" -S "${CMAKE_SOURCE_DIR}/deps/recast"
+      -B "${_recast_host_build}" -G Ninja
+      "-DRECAST_HOST_CXX=${_recast_host_cxx}"
+      -DRECAST_BUILD_DOCS=OFF -DBUILD_TESTING=OFF
+      -DRECAST_STATIC_LIBCLANG=OFF
+    RESULT_VARIABLE _recast_host_configure_result
+    OUTPUT_VARIABLE _recast_host_configure_output
+    ERROR_VARIABLE _recast_host_configure_error)
+  if(NOT _recast_host_configure_result EQUAL 0)
+    message(FATAL_ERROR "Failed to configure native Recast host tool:\n${_recast_host_configure_output}\n${_recast_host_configure_error}")
+  endif()
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" --build "${_recast_host_build}" --target recast
+    RESULT_VARIABLE _recast_host_build_result
+    OUTPUT_VARIABLE _recast_host_build_output
+    ERROR_VARIABLE _recast_host_build_error)
+  if(NOT _recast_host_build_result EQUAL 0)
+    message(FATAL_ERROR "Failed to build native Recast host tool:\n${_recast_host_build_output}\n${_recast_host_build_error}")
+  endif()
+  set(RECAST_NATIVE_BINARY "${_recast_host_build}/bin/recast" CACHE FILEPATH
+    "Native host Recast executable used for musl source transformation" FORCE)
+endif()
 if(NOT DEFINED RECAST_JOBS OR RECAST_JOBS LESS 1)
   cmake_host_system_information(RESULT RECAST_JOBS QUERY NUMBER_OF_LOGICAL_CORES)
   if(NOT RECAST_JOBS OR RECAST_JOBS LESS 1)
