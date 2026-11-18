@@ -1,0 +1,10 @@
+prefix=${pcfiledir}/../..
+exec_prefix=${prefix}
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: recast-@RECAST_PC_LINKAGE@
+Description: Recast source transformation library (@RECAST_PC_LINKAGE@)
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lrecast-@RECAST_PC_LINKAGE@
+Cflags: -I${includedir}

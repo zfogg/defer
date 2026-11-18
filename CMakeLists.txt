@@ -7,6 +7,7 @@ option(RECAST_BUILD_DOCS "Build Recast documentation targets" ON)
 
 include(GNUInstallDirs)
 include(CTest)
+include(CMakePackageConfigHelpers)
 include(cmake/LLVMDevelopment.cmake)
 
 recast_find_llvm_development()
@@ -146,7 +147,27 @@ install(TARGETS recast recast-static recast-shared
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(FILES Recast.cmake DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/recast)
+set(RECAST_CMAKE_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/recast")
+configure_package_config_file(
+  cmake/recastConfig.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/recastConfig.cmake"
+  INSTALL_DESTINATION "${RECAST_CMAKE_INSTALL_DIR}")
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/recastConfigVersion.cmake"
+  COMPATIBILITY SameMajorVersion)
+install(FILES
+  Recast.cmake
+  "${CMAKE_CURRENT_BINARY_DIR}/recastConfig.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/recastConfigVersion.cmake"
+  DESTINATION "${RECAST_CMAKE_INSTALL_DIR}")
+set(RECAST_PC_LINKAGE static)
+configure_file(pkgconfig/recast.pc.in "${CMAKE_CURRENT_BINARY_DIR}/recast-static.pc" @ONLY)
+set(RECAST_PC_LINKAGE shared)
+configure_file(pkgconfig/recast.pc.in "${CMAKE_CURRENT_BINARY_DIR}/recast-shared.pc" @ONLY)
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/recast-static.pc"
+  "${CMAKE_CURRENT_BINARY_DIR}/recast-shared.pc"
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
 if(WIN32 AND NOT RECAST_STATIC_LIBCLANG)
   install(FILES "$<TARGET_FILE:recast-libclang>" DESTINATION ${CMAKE_INSTALL_BINDIR})
