@@ -4,7 +4,7 @@
 
 [GitHub](https://github.com/zfogg/recast) · [Documentation](https://zfogg.github.io/recast/) · [C++ and C API](https://zfogg.github.io/recast/cpp/) · [Python API](https://zfogg.github.io/recast/python/)
 
-`Recast` is a source-transformation pipeline. Its defer pass provides block-scoped cleanup for C and Objective-C, and a native C++ scope guard; the closure pass is being introduced by the Recast migration. The `recast` source transformer uses LLVM 19 or newer and libclang. Existing defer spellings remain unchanged. Unsupported cases produce an error.
+`Recast` is a source-transformation pipeline for C, Objective-C, and C++. It provides block-scoped cleanup through the defer transform, closure lowering, and native C++ scope guards. The `recast` source transformer uses LLVM 19 or newer and libclang; unsupported cases produce an error.
 
 ## Build and install
 
@@ -76,7 +76,7 @@ Or transform a stream (the filename determines language and relative include res
 recast --filename input.c -- -std=c17 -Iinclude < input.c > output.c
 ```
 
-Use `recast --help` for batch manifests, compilation databases, diagnostics, and other options. The Python implementation can be invoked as `uv run --frozen python -m defer` and requires an LLVM libclang shared library.
+Use `recast --help` for batch manifests, compilation databases, diagnostics, and other options. The Python compatibility implementation can be invoked as `uv run --frozen python -m defer` and requires an LLVM libclang shared library.
 
 ### Command-line flags
 
@@ -124,7 +124,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(RECAST_NATIVE_BINARY "/path/to/recast")
 include("${CMAKE_CURRENT_SOURCE_DIR}/Recast.cmake")
 add_executable(app main.c)
-target_include_directories(app PRIVATE "/path/to/defer/include")
+target_include_directories(app PRIVATE "/path/to/recast/include")
 recast_targets(app)
 ```
 
