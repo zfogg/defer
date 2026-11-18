@@ -4,7 +4,7 @@
 
 [GitHub](https://github.com/zfogg/recast) · [Documentation](https://zfogg.github.io/recast/) · [C++ and C API](https://zfogg.github.io/recast/cpp/) · [Python API](https://zfogg.github.io/recast/python/)
 
-`Recast` is a source-transformation pipeline for C, Objective-C, and C++. It provides block-scoped cleanup through the defer transform, closure lowering, and native C++ scope guards. The `recast` source transformer uses LLVM 19 or newer and libclang; unsupported cases produce an error.
+`Recast` is a source-transformation pipeline for C, Objective-C, and C++. It provides block-scoped cleanup, closure lowering, and native C++ scope guards. The `recast` source transformer uses LLVM 19 or newer and libclang; unsupported cases produce an error.
 
 ## Build and install
 
@@ -99,7 +99,7 @@ The native tool accepts the following flags. Pass compiler options after `--`; a
 | `--libclang PATH` | Check the loaded libclang library against the specified path. |
 | `--explain SOURCE:LINE` | Explain the cleanup at a source location. |
 | `--show-transformed SOURCE:LINE` | Show the transformed function at a source location. |
-| `--scan` | List source files that may contain defer calls. |
+| `--scan` | List source files that may contain cleanup calls. |
 | `--scan-input PATH` | With `--scan`, read source paths from a UTF-8 file. |
 | `--plan-records PATH` | Plan source/output records for generated CMake build rules. |
 | `--plan-stage STAGE` | Set the stage for batch planning. |
@@ -128,7 +128,7 @@ target_include_directories(app PRIVATE "/path/to/recast/include")
 recast_targets(app)
 ```
 
-The module uses batch transformation and the compilation database, supports incremental rebuilds and header overlays, and requires single-config Ninja or Unix Makefiles. Include `defer.h` in source files. See `examples/hello_world_cmake` for an example.
+The module uses batch transformation and the compilation database, supports incremental rebuilds and header overlays, and requires single-config Ninja or Unix Makefiles. Include Recast's cleanup header (`defer.h`) in source files that use the cleanup syntax. See `examples/hello_world_cmake` for an example.
 
 For Emscripten compilation-database entries, the tool queries `emcc --cflags` for the driver's actual target and sysroot. It initializes an empty SDK sysroot through `emcc` when needed; it does not assume the cache is next to the compiler.
 
@@ -142,18 +142,18 @@ The module also accepts these CMake variables:
 | `RECAST_NATIVE_BINARY` | Path to the host executable; otherwise it is found on `PATH`. |
 | `RECAST_HEADER_OVERLAYS` | `AUTO` (default), `ON`, or `OFF`. |
 | `RECAST_SHARED_CACHE` | Directory for the native shared transformation cache. |
-| `RECAST_WRAPPER_HEADER_DIRS` | Additional directories containing defer wrapper macros. |
+| `RECAST_WRAPPER_HEADER_DIRS` | Additional directories containing Recast wrapper macros. |
 | `RECAST_TRANSFORMS` | Comma-separated transforms used by the CMake integration; defaults to `all` (`defer`, `closures`, or both). |
-| `RECAST_SOURCE_HOOK` | Optional CMake function that preprocesses eligible sources before defer. |
+| `RECAST_SOURCE_HOOK` | Optional CMake function that preprocesses eligible sources before transformation. |
 | `RECAST_TOOL_ROOT` | Standalone source checkout used by the Python backend. |
 | `RECAST_PYTHON_COMMAND` | Python command used by the Python backend. |
 | `RECAST_LIBCLANG_PATH` | Shared libclang library used by the Python backend; defaults to `LIBCLANG_LIBRARY_FILE` if set. |
 
 The optional source hook is called as `hook(output_variable target source relative_path compiled_path)`.
 Set the output variable in the parent scope to the original source or a generated source. The
-generated source must have a build rule and preserve defer statements for the next stage.
-`compiled_path` identifies the defer output in the compilation database, or is empty when the
-source has no defer. The hook is responsible for tracking its generated file's dependencies.
+generated source must have a build rule and preserve Recast syntax for the next stage.
+`compiled_path` identifies the transformed output in the compilation database, or is empty when the
+source has no applicable Recast syntax. The hook is responsible for tracking its generated file's dependencies.
 
 For a release archive, CMake can download the appropriate host archive and generate the module during configuration. Set `RECAST_ARCHIVE_URL` to a versioned release ZIP and `RECAST_ARCHIVE_SHA256` to its published checksum:
 
@@ -164,8 +164,8 @@ if(NOT EXISTS "${_recast_dir}/recast.zip")
   file(DOWNLOAD "${RECAST_ARCHIVE_URL}" "${_recast_dir}/recast.zip"
        EXPECTED_HASH "SHA256=${RECAST_ARCHIVE_SHA256}" TLS_VERIFY ON)
 else()
-  file(SHA256 "${_recast_dir}/recast.zip" _defer_archive_hash)
-  if(NOT _defer_archive_hash STREQUAL RECAST_ARCHIVE_SHA256)
+  file(SHA256 "${_recast_dir}/recast.zip" _recast_archive_hash)
+  if(NOT _recast_archive_hash STREQUAL RECAST_ARCHIVE_SHA256)
     message(FATAL_ERROR "Cached Recast archive does not match RECAST_ARCHIVE_SHA256")
   endif()
 endif()
