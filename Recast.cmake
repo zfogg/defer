@@ -371,9 +371,16 @@ function(recast_finish_batches)
                 "${RECAST_SOURCE_ROOT}/src"
                 "${RECAST_SOURCE_ROOT}/deps"
                 ${RECAST_EXTRA_INCLUDE_DIRS})
+            if(WIN32)
+                # CMake lists use semicolons, but Windows CPATH must reach
+                # cmake -E env as one command argument.
+                string(REPLACE ";" "\\;" _recast_cpath_arg "${_recast_cpath}")
+            else()
+                set(_recast_cpath_arg "${_recast_cpath}")
+            endif()
             add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
                 COMMAND "${CMAKE_COMMAND}" -E env
-                    "CPATH=${_recast_cpath}"
+                    "CPATH=${_recast_cpath_arg}"
                     "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
                     "RECAST_JOBS=${RECAST_JOBS}"
                     "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
