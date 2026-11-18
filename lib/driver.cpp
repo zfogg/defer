@@ -287,6 +287,7 @@ std::vector<std::string> compile_arguments(const fs::path &database, const fs::p
     result.push_back("x86_64-pc-windows-msvc");
     result.push_back("-fms-compatibility");
     result.push_back("-fms-compatibility-version=19.44");
+    result.push_back("-fms-extensions");
   }
   if (emscripten) {
     const auto defaults = emscripten_driver_defaults(compiler);
