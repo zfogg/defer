@@ -374,7 +374,7 @@ function(recast_finish_batches)
             if(WIN32)
                 # CMake lists use semicolons, but Windows CPATH must reach
                 # cmake -E env as one command argument.
-                string(REPLACE ";" "\\;" _recast_cpath_arg "${_recast_cpath}")
+                set(_recast_cpath_arg "$<JOIN:${_recast_cpath},$<SEMICOLON>>")
             else()
                 set(_recast_cpath_arg "${_recast_cpath}")
             endif()
