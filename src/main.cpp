@@ -758,8 +758,8 @@ int main(int argc, char **argv) {
     if (!depfile_path.empty())
       defer_tool::write_depfile(depfile_path, dependencies);
     if (incremental)
-      llvm::errs() << "recast: transformed " << std::count(cached.begin(), cached.end(), false) << " of "
-                   << inputs.size() << " files (" << std::count(restored.begin(), restored.end(), true)
+      llvm::errs() << "recast: transformed " << std::count(cached.begin(), cached.end(), static_cast<char>(false)) << " of "
+                   << inputs.size() << " files (" << std::count(restored.begin(), restored.end(), static_cast<char>(true))
                    << " restored from shared cache)\n";
     return 0;
   } catch (const std::exception &error) {
