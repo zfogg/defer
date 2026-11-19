@@ -26,6 +26,9 @@ int main() {
       "return add(5) + total; }\n",
       {"-I" RECAST_TEST_INCLUDE, "-std=gnu17"});
   CHECK(closure.find("__recast_add_offset") != std::string::npos);
+  CHECK(closure.find("__recast_add_offset = offset") != std::string::npos);
+  CHECK(closure.find("__recast_add_total = &total") != std::string::npos);
+  CHECK(closure.find("(*__recast_add_total)") != std::string::npos);
   CHECK(closure.find("__defer_active_") != std::string::npos);
   const auto non_void = defer_tool::transform_source(
       "closure.c",
