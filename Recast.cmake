@@ -374,28 +374,54 @@ function(recast_finish_batches)
                 "${RECAST_SOURCE_ROOT}/deps"
                 ${RECAST_EXTRA_INCLUDE_DIRS})
             if(WIN32)
-                # CMake lists use semicolons, but Windows CPATH must reach
-                # cmake -E env as one command argument.
-                set(_recast_cpath_arg "$<JOIN:${_recast_cpath},$<SEMICOLON>>")
+                # Visual Studio's .vcxproj generator splits semicolon-bearing
+                # environment values into separate batch arguments. Generate
+                # a CMake runner instead, so CPATH remains one environment
+                # value and never passes through cmd.exe parsing.
+                set(_recast_runner "${CMAKE_BINARY_DIR}/recast_transformed/run-${_id}.cmake")
+                string(CONCAT _recast_runner_content
+                    "set(ENV{CPATH} [=[${_recast_cpath}]=])\n"
+                    "set(ENV{C_INCLUDE_PATH} [=[]=])\n"
+                    "set(ENV{CPLUS_INCLUDE_PATH} [=[]=])\n"
+                    "set(ENV{OBJC_INCLUDE_PATH} [=[]=])\n"
+                    "set(ENV{OBJCPLUS_INCLUDE_PATH} [=[]=])\n"
+                    "set(ENV{RECAST_TRANSFORMS} [=[${RECAST_TRANSFORMS}]=])\n"
+                    "set(ENV{RECAST_JOBS} [=[${RECAST_JOBS}]=])\n"
+                    "set(ENV{RECAST_SHARED_CACHE} [=[${RECAST_SHARED_CACHE}]=])\n"
+                    "set(ENV{RECAST_HEADER_OVERLAYS} [=[$<IF:$<BOOL:${_header_active}>,ON,OFF>]=])\n"
+                    "execute_process(COMMAND \"${_recast_tool_command}\"\n"
+                    "    --materialized-headers-root \"${CMAKE_BINARY_DIR}/recast_headers\"\n"
+                    "    --materialized-source-root \"${RECAST_SOURCE_ROOT}\"\n"
+                    "    --batch \"${_manifest}\"\n"
+                    "    --compilation-database \"${CMAKE_BINARY_DIR}\" --depfile \"${_depfile}\" --dependency-stamps --incremental\n"
+                    "    RESULT_VARIABLE _recast_result)\n"
+                    "if(NOT _recast_result EQUAL 0)\n"
+                    "  message(FATAL_ERROR \"recast transform failed\")\n"
+                    "endif()\n")
+                file(GENERATE OUTPUT "${_recast_runner}" CONTENT "${_recast_runner_content}")
+                add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
+                    COMMAND "${CMAKE_COMMAND}" -P "${_recast_runner}"
+                    DEPENDS ${_sources} "${_manifest}" ${_recast_tool_dependency}
+                        "${CMAKE_BINARY_DIR}/compile_commands.json" "${_recast_runner}"
+                    DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
             else()
-                set(_recast_cpath_arg "${_recast_cpath}")
+                add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
+                    COMMAND "${CMAKE_COMMAND}" -E env
+                        "CPATH=${_recast_cpath}"
+                        "C_INCLUDE_PATH=" "CPLUS_INCLUDE_PATH="
+                        "OBJC_INCLUDE_PATH=" "OBJCPLUS_INCLUDE_PATH="
+                        "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
+                        "RECAST_JOBS=${RECAST_JOBS}"
+                        "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
+                        "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
+                        "${_recast_tool_command}"
+                        --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
+                        --materialized-source-root "${RECAST_SOURCE_ROOT}"
+                        --batch "${_manifest}"
+                        --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
+                    DEPENDS ${_sources} "${_manifest}" ${_recast_tool_dependency} "${CMAKE_BINARY_DIR}/compile_commands.json"
+                    DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
             endif()
-            add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
-                COMMAND "${CMAKE_COMMAND}" -E env
-                    "CPATH=${_recast_cpath_arg}"
-                    "C_INCLUDE_PATH=" "CPLUS_INCLUDE_PATH="
-                    "OBJC_INCLUDE_PATH=" "OBJCPLUS_INCLUDE_PATH="
-                    "RECAST_TRANSFORMS=${RECAST_TRANSFORMS}"
-                    "RECAST_JOBS=${RECAST_JOBS}"
-                    "RECAST_SHARED_CACHE=${RECAST_SHARED_CACHE}"
-                    "RECAST_HEADER_OVERLAYS=$<IF:$<BOOL:${_header_active}>,ON,OFF>"
-                    "${_recast_tool_command}"
-                    --materialized-headers-root "${CMAKE_BINARY_DIR}/recast_headers"
-                    --materialized-source-root "${RECAST_SOURCE_ROOT}"
-                    --batch "${_manifest}"
-                    --compilation-database "${CMAKE_BINARY_DIR}" --depfile "${_depfile}" --dependency-stamps --incremental
-                DEPENDS ${_sources} "${_manifest}" ${_recast_tool_dependency} "${CMAKE_BINARY_DIR}/compile_commands.json"
-                DEPFILE "${_depfile}" COMMENT "Transforming defer source batch" VERBATIM)
             add_custom_target("recast-${_id}" DEPENDS ${_outputs} ${_stamps} ${_overlays})
             add_dependencies(recast-materialized-headers "recast-${_id}")
             if(_prerequisites)
