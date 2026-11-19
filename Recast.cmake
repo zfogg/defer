@@ -396,7 +396,7 @@ function(recast_finish_batches)
                     "    --compilation-database \"${CMAKE_BINARY_DIR}\" --depfile \"${_depfile}\" --dependency-stamps --incremental\n"
                     "    RESULT_VARIABLE _recast_result)\n"
                     "if(NOT _recast_result EQUAL 0)\n"
-                    "  message(FATAL_ERROR \"recast failed with exit code $${_recast_result}\")\n"
+                    "  message(FATAL_ERROR \"recast transform failed\")\n"
                     "endif()\n")
                 file(GENERATE OUTPUT "${_recast_runner}" CONTENT "${_recast_runner_content}")
                 add_custom_command(OUTPUT ${_outputs} ${_stamps} ${_overlays}
