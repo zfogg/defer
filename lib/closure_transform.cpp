@@ -162,6 +162,25 @@ std::string replace_captures(std::string_view body, const std::map<std::string, 
   return result;
 }
 
+unsigned brace_depth_before(std::string_view source, std::size_t end) {
+  unsigned depth = 0;
+  bool line_comment = false, block_comment = false, string = false;
+  char quote = 0;
+  for (std::size_t i = 0; i < end; ++i) {
+    const char c = source[i];
+    const char next = i + 1 < end ? source[i + 1] : 0;
+    if (line_comment) { if (c == '\n') line_comment = false; continue; }
+    if (block_comment) { if (c == '*' && next == '/') { block_comment = false; ++i; } continue; }
+    if (string) { if (c == '\\') ++i; else if (c == quote) string = false; continue; }
+    if (c == '/' && next == '/') { line_comment = true; ++i; continue; }
+    if (c == '/' && next == '*') { block_comment = true; ++i; continue; }
+    if (c == '"' || c == '\'') { string = true; quote = c; continue; }
+    if (c == '{') ++depth;
+    else if (c == '}' && depth) --depth;
+  }
+  return depth;
+}
+
 } // namespace
 
 std::string transform_closures(const std::string &source) {
@@ -231,24 +250,6 @@ std::string transform_closures(const std::string &source) {
     }
     output.replace(it->begin, it->end - it->begin, declarations);
   }
-  // Normalize namespaced calls before lowering each closure. The source-level
-  // spelling avoids collisions with ordinary project macros, while the
-  // transformed output is a direct call expression.
-  for (std::size_t pos = 0; (pos = output.find("recast_call(", pos)) != std::string::npos;) {
-    const auto open = output.find('(', pos);
-    const auto close = matching(output, open, '(', ')');
-    const auto parts = comma_parts(std::string_view(output).substr(open + 1, close - open - 1));
-    if (parts.size() < 2) throw std::runtime_error("Recast call requires a closure name and arguments");
-    std::string call = trim(parts.front()) + "(";
-    for (std::size_t i = 1; i < parts.size(); ++i) {
-      if (i > 1) call += ", ";
-      call += trim(parts[i]);
-    }
-    call += ")";
-    output.replace(pos, close - pos + 1, call);
-    pos += call.size();
-  }
-
   for (const auto &closure : closures) {
     std::map<std::string, std::string> names;
     for (const auto &capture : closure.captures) {
@@ -259,6 +260,8 @@ std::string transform_closures(const std::string &source) {
     const std::string call = closure.name + "(";
     std::size_t pos = 0;
     while ((pos = output.find(call, pos)) != std::string::npos) {
+      if (brace_depth_before(output, pos) == 0)
+        throw std::runtime_error("Recast closure calls are supported only inside function bodies");
       const auto open = output.find('(', pos + closure.name.size());
       const auto close = matching(output, open, '(', ')');
       auto call_parts = comma_parts(std::string_view(output).substr(open + 1, close - open - 1));
