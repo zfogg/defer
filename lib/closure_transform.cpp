@@ -162,6 +162,25 @@ std::string replace_captures(std::string_view body, const std::map<std::string, 
   return result;
 }
 
+unsigned brace_depth_before(std::string_view source, std::size_t end) {
+  unsigned depth = 0;
+  bool line_comment = false, block_comment = false, string = false;
+  char quote = 0;
+  for (std::size_t i = 0; i < end; ++i) {
+    const char c = source[i];
+    const char next = i + 1 < end ? source[i + 1] : 0;
+    if (line_comment) { if (c == '\n') line_comment = false; continue; }
+    if (block_comment) { if (c == '*' && next == '/') { block_comment = false; ++i; } continue; }
+    if (string) { if (c == '\\') ++i; else if (c == quote) string = false; continue; }
+    if (c == '/' && next == '/') { line_comment = true; ++i; continue; }
+    if (c == '/' && next == '*') { block_comment = true; ++i; continue; }
+    if (c == '"' || c == '\'') { string = true; quote = c; continue; }
+    if (c == '{') ++depth;
+    else if (c == '}' && depth) --depth;
+  }
+  return depth;
+}
+
 } // namespace
 
 std::string transform_closures(const std::string &source) {
@@ -214,45 +233,43 @@ std::string transform_closures(const std::string &source) {
     cursor = close + 1;
   }
   if (closures.empty()) return source;
-  // The closure body is expanded at each call site, where the captured locals
-  // are already in scope. Do not synthesize capture declarations here: GNU
-  // __typeof__ is unavailable in native MSVC C, and the source-level captures
-  // already provide the correct lexical semantics for the supported lowering.
+  // Materialize captures where the closure is declared.  This keeps copy()
+  // captures independent of later writes and makes ref() captures point at
+  // the original object.  Clang-cl accepts __typeof__ in MS compatibility
+  // mode, while the generated call itself remains a normal C expression.
   std::string output = source;
   for (auto it = closures.rbegin(); it != closures.rend(); ++it) {
-    output.replace(it->begin, it->end - it->begin, "");
-  }
-  // Normalize namespaced calls before lowering each closure. The source-level
-  // spelling avoids collisions with ordinary project macros, while the
-  // transformed output is a direct call expression.
-  for (std::size_t pos = 0; (pos = output.find("recast_call(", pos)) != std::string::npos;) {
-    const auto open = output.find('(', pos);
-    const auto close = matching(output, open, '(', ')');
-    const auto parts = comma_parts(std::string_view(output).substr(open + 1, close - open - 1));
-    if (parts.size() < 2) throw std::runtime_error("Recast call requires a closure name and arguments");
-    std::string call = trim(parts.front()) + "(";
-    for (std::size_t i = 1; i < parts.size(); ++i) {
-      if (i > 1) call += ", ";
-      call += trim(parts[i]);
+    std::string declarations;
+    for (const auto &capture : it->captures) {
+      const auto storage = "__recast_" + it->name + "_" + capture.name;
+      if (capture.reference) {
+        declarations += "__typeof__(&" + capture.name + ") " + storage + " = &" + capture.name + ";\n";
+      } else {
+        declarations += "__typeof__(" + capture.name + ") " + storage + " = " + capture.name + ";\n";
+      }
     }
-    call += ")";
-    output.replace(pos, close - pos + 1, call);
-    pos += call.size();
+    output.replace(it->begin, it->end - it->begin, declarations);
   }
-
   for (const auto &closure : closures) {
     std::map<std::string, std::string> names;
     for (const auto &capture : closure.captures) {
-      names.emplace(capture.name, capture.name);
+      const auto storage = "__recast_" + closure.name + "_" + capture.name;
+      names.emplace(capture.name, capture.reference ? "(*" + storage + ")" : storage);
     }
     const auto body = replace_captures(closure.body, names);
     const std::string call = closure.name + "(";
     std::size_t pos = 0;
     while ((pos = output.find(call, pos)) != std::string::npos) {
+      if (brace_depth_before(output, pos) == 0)
+        throw std::runtime_error("Recast closure calls are supported only inside function bodies");
       const auto open = output.find('(', pos + closure.name.size());
       const auto close = matching(output, open, '(', ')');
       auto call_parts = comma_parts(std::string_view(output).substr(open + 1, close - open - 1));
-      std::string expression = "{ ";
+      // A closure call is an expression, so keep the compound statement
+      // wrapped as a GNU C statement expression.  The previous bare block
+      // produced `return { ... } + value`, which libclang rejects before the
+      // transformed source can be validated.
+      std::string expression = "({ ";
       if (!closure.parameters.empty() && closure.parameters != "void") {
         const auto declarations = comma_parts(closure.parameters);
         if (declarations.size() != call_parts.size())
@@ -289,7 +306,7 @@ std::string transform_closures(const std::string &source) {
         expression += closure.result + " " + result_expression + " = (" + closure.result + "){0}; ";
       expression += lowered_body;
       if (!result_expression.empty()) expression += " " + result_expression + ";";
-      expression += " }";
+      expression += " })";
       output.replace(pos, close - pos + 1, expression);
       pos += expression.size();
     }

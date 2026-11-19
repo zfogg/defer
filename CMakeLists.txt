@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(recast VERSION 0.1.0 LANGUAGES CXX)
+project(recast VERSION 0.1.16 LANGUAGES CXX)
 
 option(RECAST_STATIC_LIBCLANG "Link libclang and LLVM statically" OFF)
 option(RECAST_FULLY_STATIC_EXECUTABLE "Link the executable without shared libraries (musl Linux)" OFF)
@@ -68,6 +68,13 @@ foreach(_kind STATIC SHARED)
   string(TOLOWER ${_kind} _suffix)
   add_library(recast-${_suffix} ${_kind} $<TARGET_OBJECTS:recast-objects>)
   set_target_properties(recast-${_suffix} PROPERTIES OUTPUT_NAME "recast-${_suffix}" WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  if(_kind STREQUAL "SHARED" AND WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # The public ABI is explicitly marked in api.h. Do not scan LLVM's MSVC
+    # import libraries, which makes MinGW treat their CRT directives as Recast
+    # exports.
+    set_property(TARGET recast-${_suffix} PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+    target_compile_definitions(recast-objects PRIVATE RECAST_BUILD_SHARED)
+  endif()
   target_include_directories(recast-${_suffix} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
   target_link_libraries(recast-${_suffix} PUBLIC recast-llvm-support recast-libclang ${CMAKE_DL_LIBS})
 endforeach()

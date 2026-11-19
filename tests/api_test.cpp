@@ -26,14 +26,25 @@ int main() {
       "return add(5) + total; }\n",
       {"-I" RECAST_TEST_INCLUDE, "-std=gnu17"});
   CHECK(closure.find("__recast_add_offset") != std::string::npos);
+  CHECK(closure.find("__recast_add_offset = offset") != std::string::npos);
+  CHECK(closure.find("__recast_add_total = &total") != std::string::npos);
+  CHECK(closure.find("(*__recast_add_total)") != std::string::npos);
   CHECK(closure.find("__defer_active_") != std::string::npos);
   const auto non_void = defer_tool::transform_source(
       "closure.c",
-      "recast_closure(add_one, int, (int x), (), { return x + 1; });\n"
-      "int value = recast_call(add_one, 41);\n");
+      "int f(void) { recast_closure(add_one, int, (int x), (), { return x + 1; });\n"
+      "return add_one(41); }\n");
   CHECK(non_void.find("int __recast_result_add_one = (int){0};") != std::string::npos);
   CHECK(non_void.find("__recast_result_add_one = x + 1;") != std::string::npos);
   CHECK(non_void.find("__recast_result_add_one; }") != std::string::npos);
+  try {
+    (void)defer_tool::transform_source(
+        "api.c", "recast_closure(add_one, int, (int x), (), { return x + 1; });\n"
+                  "int value = add_one(41);\n");
+    CHECK(false);
+  } catch (const std::runtime_error &error) {
+    CHECK(std::string(error.what()).find("only inside function bodies") != std::string::npos);
+  }
   try {
     (void)defer_tool::transform_source("", "void f(void) {}\n");
     CHECK(false);

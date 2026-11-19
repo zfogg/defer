@@ -2,6 +2,12 @@
 
 #include <stddef.h>
 
+#if defined(_WIN32) && defined(RECAST_BUILD_SHARED)
+#define RECAST_API __declspec(dllexport)
+#else
+#define RECAST_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -16,11 +22,12 @@ extern "C" {
  * diagnostic in ``*error``.
  * Release both output and error using defer_free_buffer, not the caller's free.
  */
-int defer_transform_source(const char *filename, const char *source, size_t source_size, const char *const *arguments,
-                           size_t argument_count, char **output, size_t *output_size, char **error);
+RECAST_API int defer_transform_source(const char *filename, const char *source, size_t source_size,
+                                      const char *const *arguments, size_t argument_count, char **output,
+                                      size_t *output_size, char **error);
 
 /** Release a buffer returned by defer_transform_source; NULL is accepted. */
-void defer_free_buffer(char *buffer);
+RECAST_API void defer_free_buffer(char *buffer);
 
 #ifdef __cplusplus
 }

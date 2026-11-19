@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -216,6 +217,13 @@ def main() -> None:
     shutil.copytree(source / "clang/include/clang-c", stage / "include/clang-c", dirs_exist_ok=True)
     pkgconfig = stage / "lib" / "pkgconfig"
     pkgconfig.mkdir(parents=True, exist_ok=True)
+    version_match = re.search(
+        r"project\(recast VERSION ([0-9]+\.[0-9]+\.[0-9]+)",
+        (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
+    )
+    if version_match is None:
+        raise RuntimeError("unable to determine Recast project version")
+    version = version_match.group(1)
     for linkage, library in (("static", "recast-static"), ("shared", "recast-shared")):
         (pkgconfig / f"recast-{linkage}.pc").write_text(
             f"""prefix=${{pcfiledir}}/../..\n
@@ -224,7 +232,7 @@ def main() -> None:
             f"includedir=${{prefix}}/include\n\n"
             f"Name: recast-{linkage}\n"
             f"Description: Recast source transformation library ({linkage})\n"
-            f"Version: {LLVM_VERSION}\n"
+            f"Version: {version}\n"
             f"Libs: -L${{libdir}} -l{library}\n"
             f"Cflags: -I${{includedir}}\n""",
             encoding="utf-8",

@@ -903,7 +903,7 @@ def require_objc_exceptions(arguments: list[str]) -> None:
 def transform_input(index: cindex.Index, path: Path, source: bytes, arguments: list[str],
                     objc: bool) -> tuple[cindex.TranslationUnit, bytes]:
     """Analyze and validate a single source supplied as bytes."""
-    if any(marker in source for marker in (b"closure", b"recast_call", b"bind")):
+    if any(marker in source for marker in (b"closure", b"bind")):
         raise TransformError("the Python backend does not support Recast closures; use the native backend")
     if is_cpp_source(path, arguments):
         tu = index.parse(str(path), args=arguments, unsaved_files=[(str(path), source)])
