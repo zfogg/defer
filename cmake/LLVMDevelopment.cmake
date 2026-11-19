@@ -1,6 +1,8 @@
 include_guard(GLOBAL)
 
 option(RECAST_AUTO_DOWNLOAD_LLVM_DEV "Download the Windows LLVM development archive when it is unavailable" ON)
+set(RECAST_DEPS_CACHE_DIR "${CMAKE_SOURCE_DIR}/.deps-cache" CACHE PATH
+    "Persistent dependency cache used by Recast's development toolchain")
 
 # Locate the host libraries used by the native defer tool. The Windows archive
 # contains only the headers and libraries needed for this tool; it does not
@@ -54,7 +56,7 @@ function(recast_find_llvm_development)
             else()
                 set(_suffix "")
             endif()
-            set(_root "${CMAKE_SOURCE_DIR}/.deps-cache/llvm-dev-23.1.3${_suffix}")
+            set(_root "${RECAST_DEPS_CACHE_DIR}/llvm-dev-23.1.3${_suffix}")
             if(RECAST_AUTO_DOWNLOAD_LLVM_DEV AND NOT EXISTS "${_root}/include/llvm/Support/CommandLine.h")
                 if(_suffix STREQUAL "-aarch64")
                     set(_llvm_archive_arch "aarch64")
@@ -63,7 +65,7 @@ function(recast_find_llvm_development)
                 endif()
                 set(_llvm_version "23.1.5")
                 set(_llvm_archive_name "clang+llvm-${_llvm_version}-${_llvm_archive_arch}-pc-windows-msvc.tar.xz")
-                set(_llvm_cache_root "${ASCIICHAT_DEPS_CACHE_DIR}/llvm-dev")
+                set(_llvm_cache_root "${RECAST_DEPS_CACHE_DIR}/llvm-dev")
                 set(_llvm_archive "${_llvm_cache_root}/${_llvm_archive_name}")
                 set(_llvm_download_root "${_llvm_cache_root}/llvm-dev-${_llvm_version}${_suffix}")
                 set(_llvm_extracted_root "${_llvm_cache_root}/clang+llvm-${_llvm_version}-${_llvm_archive_arch}-pc-windows-msvc")
