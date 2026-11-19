@@ -226,15 +226,17 @@ def main() -> None:
     version = version_match.group(1)
     for linkage, library in (("static", "recast-static"), ("shared", "recast-shared")):
         (pkgconfig / f"recast-{linkage}.pc").write_text(
-            f"""prefix=${{pcfiledir}}/../..\n
-            f"exec_prefix=${{prefix}}\n"
-            f"libdir=${{prefix}}/lib\n"
-            f"includedir=${{prefix}}/include\n\n"
-            f"Name: recast-{linkage}\n"
-            f"Description: Recast source transformation library ({linkage})\n"
-            f"Version: {version}\n"
-            f"Libs: -L${{libdir}} -l{library}\n"
-            f"Cflags: -I${{includedir}}\n""",
+            f"""prefix=${{pcfiledir}}/../..
+exec_prefix=${{prefix}}
+libdir=${{prefix}}/lib
+includedir=${{prefix}}/include
+
+Name: recast-{linkage}
+Description: Recast source transformation library ({linkage})
+Version: {version}
+Libs: -L${{libdir}} -l{library}
+Cflags: -I${{includedir}}
+""",
             encoding="utf-8",
         )
     combine_archives(stage, llvm)
