@@ -68,6 +68,13 @@ foreach(_kind STATIC SHARED)
   string(TOLOWER ${_kind} _suffix)
   add_library(recast-${_suffix} ${_kind} $<TARGET_OBJECTS:recast-objects>)
   set_target_properties(recast-${_suffix} PROPERTIES OUTPUT_NAME "recast-${_suffix}" WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  if(_kind STREQUAL "SHARED" AND WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # CMake's MSVC .def scanner cannot consume the LLVM import libraries used
+    # by MinGW. Use the GNU linker export pass instead, which keeps the Recast
+    # shared API exported without trying to export LLVM runtime directives.
+    set_property(TARGET recast-${_suffix} PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+    target_link_options(recast-${_suffix} PRIVATE -Wl,--export-all-symbols)
+  endif()
   target_include_directories(recast-${_suffix} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
   target_link_libraries(recast-${_suffix} PUBLIC recast-llvm-support recast-libclang ${CMAKE_DL_LIBS})
 endforeach()
