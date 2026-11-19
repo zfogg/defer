@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(recast VERSION 0.1.16 LANGUAGES CXX)
+project(recast VERSION 0.1.17 LANGUAGES CXX)
 
 option(RECAST_STATIC_LIBCLANG "Link libclang and LLVM statically" OFF)
 option(RECAST_FULLY_STATIC_EXECUTABLE "Link the executable without shared libraries (musl Linux)" OFF)
