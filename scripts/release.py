@@ -142,45 +142,34 @@ def verify_sdk(work: Path, stage: Path, cxx: str) -> None:
         'if (!output || !strstr(output, "__defer_active_")) return 3; defer_free_buffer(output); '
         'std::cout << "SDK smoke test\\n"; return 0; }\n', encoding="utf-8"
     )
-    (source / "CMakeLists.txt").write_text(
-        '''cmake_minimum_required(VERSION 3.25)
+    for kind in ("static", "shared"):
+        kind_source = source / kind
+        kind_source.mkdir(exist_ok=True)
+        (kind_source / "CMakeLists.txt").write_text(
+            '''cmake_minimum_required(VERSION 3.25)
 project(sdk_smoke LANGUAGES CXX)
 find_package(Threads REQUIRED)
-add_library(sdk_static STATIC IMPORTED)
-add_library(sdk_shared SHARED IMPORTED)
+find_package(recast CONFIG REQUIRED)
+add_executable(smoke "${CMAKE_CURRENT_LIST_DIR}/../main.cpp")
+target_compile_features(smoke PRIVATE cxx_std_23)
+target_link_libraries(smoke PRIVATE recast::recast Threads::Threads ${CMAKE_DL_LIBS})
 if(WIN32)
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/recast-static.lib")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_IMPLIB "${SDK_ROOT}/lib/recast-shared.lib" IMPORTED_LOCATION "${SDK_ROOT}/bin/recast-shared.dll")
-elseif(APPLE)
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-static.a")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-shared.dylib")
-else()
-  set_target_properties(sdk_static PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-static.a")
-  set_target_properties(sdk_shared PROPERTIES IMPORTED_LOCATION "${SDK_ROOT}/lib/librecast-shared.so")
+  target_link_libraries(smoke PRIVATE advapi32 shell32 ole32 version ws2_32 dbghelp bcrypt ntdll)
 endif()
-foreach(kind static shared)
-  add_executable(smoke_${kind} main.cpp)
-  target_compile_features(smoke_${kind} PRIVATE cxx_std_23)
-  target_include_directories(smoke_${kind} PRIVATE "${SDK_ROOT}/include")
-  target_link_libraries(smoke_${kind} PRIVATE sdk_${kind} Threads::Threads ${CMAKE_DL_LIBS})
-  if(WIN32)
-    target_link_libraries(smoke_${kind} PRIVATE advapi32 shell32 ole32 version ws2_32 dbghelp bcrypt ntdll)
-  endif()
-endforeach()
 ''', encoding="utf-8"
-    )
-    build = work / "sdk-smoke-build"
-    configure = ["cmake", "-S", source, "-B", build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
-                 "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
-                 f"-DCMAKE_CXX_COMPILER={cxx}", f"-DSDK_ROOT={stage}"]
-    if sys.platform == "win32" and os.environ.get("RECAST_COMPILER_TARGET"):
-        configure.append(f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}")
-    run(*configure)
-    run("cmake", "--build", build)
-    if sys.platform == "win32":
-        shutil.copyfile(stage / "bin/recast-shared.dll", build / "recast-shared.dll")
-    for kind in ("static", "shared"):
-        executable = build / (f"smoke_{kind}.exe" if sys.platform == "win32" else f"smoke_{kind}")
+        )
+        build = work / f"sdk-smoke-build-{kind}"
+        configure = ["cmake", "-S", kind_source, "-B", build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
+                     "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+                     f"-DCMAKE_CXX_COMPILER={cxx}", f"-DCMAKE_PREFIX_PATH={stage}",
+                     f"-DRECAST_LINKAGE={kind.upper()}"]
+        if sys.platform == "win32" and os.environ.get("RECAST_COMPILER_TARGET"):
+            configure.append(f"-DCMAKE_CXX_COMPILER_TARGET={os.environ['RECAST_COMPILER_TARGET']}")
+        run(*configure)
+        run("cmake", "--build", build)
+        if sys.platform == "win32":
+            shutil.copyfile(stage / "bin/recast-shared.dll", build / "recast-shared.dll")
+        executable = build / ("smoke.exe" if sys.platform == "win32" else "smoke")
         if subprocess.check_output([executable, stage / "include"], text=True) != "SDK smoke test\n":
             raise RuntimeError(f"{kind} SDK smoke test failed")
 
