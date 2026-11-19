@@ -79,7 +79,7 @@ def main() -> None:
         raise RuntimeError("native API documentation did not include the transformer")
     if ".. cpp:function::" in api_page or ".. c:function::" in api_page:
         raise RuntimeError("native API directives were not rendered")
-    if "Native C++ tool and SDK" not in (output / "cpp/index.html").read_text(encoding="utf-8"):
+    if "C++ SDK" not in (output / "cpp/index.html").read_text(encoding="utf-8"):
         raise RuntimeError("C++ landing page did not render its README")
     if "Python defer tool" not in landing.read_text(encoding="utf-8"):
         raise RuntimeError("Python landing page did not render its README")
