@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
 option(RECAST_AUTO_DOWNLOAD_LLVM_DEV "Download the Windows LLVM development archive when it is unavailable" ON)
-set(RECAST_DEPS_CACHE_DIR "${CMAKE_SOURCE_DIR}/.deps-cache" CACHE PATH
+set(RECAST_DEPS_CACHE_DIR "${PROJECT_SOURCE_DIR}/.deps-cache" CACHE PATH
     "Persistent dependency cache used by Recast's development toolchain")
 
 # Locate the host libraries used by the native defer tool. The Windows archive
